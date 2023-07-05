@@ -1,0 +1,4 @@
+%{
+  "net_address": {:hex, :net_address, "0.3.0", "0fd8bdccdcb74986b7e808bc1f99a7cf4bbc8232bffd6958e18a963500adb541", [:mix], [], "hexpm", "678886a834e031009eda8a45f3e2cbda94a20a1e5fbc174e88e3f031eeb62c5f"},
+  "socket": {:hex, :socket, "0.3.13", "98a2ab20ce17f95fb512c5cadddba32b57273e0d2dba2d2e5f976c5969d0c632", [:mix], [], "hexpm", "f82ea9833ef49dde272e6568ab8aac657a636acb4cf44a7de8a935acb8957c2e"},
+}
