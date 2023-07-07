@@ -41,12 +41,8 @@ defmodule Protocols do
 
         @impl Transport
         def send(conn, telegram) do
-          bytes = TG.unparse(telegram)
           # TODO: use send_timeout?
-          case :gen_tcp.send(conn, bytes) do
-            :ok -> :ok
-            {:error, reason} -> {:error, reason}
-          end
+          :gen_tcp.send(conn, TG.unparse(telegram))
         end
 
         defp recv_cont(conn, acc, need) do
@@ -58,9 +54,10 @@ defmodule Protocols do
               case TG.parse(msg) do
                 {:ok, res} -> {:ok, res}
                 {:need_more, n} -> recv_cont(conn, msg, n)
-                {:error, reason} -> {:error, reason}
+                {:error, reason} -> {:error, {:parse_failed, reason}}
               end
 
+            # TODO: timeout, closed?
             {:error, reason} ->
               {:error, reason}
           end
@@ -71,13 +68,9 @@ defmodule Protocols do
           recv_cont(conn, <<>>, 1)
         end
 
-        def connect(addr, port, timeout) do
+        def connect(addr, port, timeout),
           # TODO: Opts
-          case :gen_tcp.connect(addr, port, [{:active, false}], timeout) do
-            {:error, reason} -> {:error, reason}
-            {:ok, socket} -> {:ok, socket}
-          end
-        end
+          do: :gen_tcp.connect(addr, port, [{:active, false}], timeout)
       end
     end
   end
@@ -94,18 +87,26 @@ defmodule Protocols do
       quote do
         alias unquote(opts[:transport]), as: TR
 
-        def request!(conn, telegram) do
+        def request(conn, telegram) do
           case TR.send(conn, telegram) do
+            {:error, reason} ->
+              {:error, {:send_failed, reason}}
+
             :ok ->
               case TR.recv(conn) do
-                {:ok, response} -> response
-                # TODO: add 'receive failed'?
-                {:error, reason} -> throw(reason)
+                {:error, reason} -> {:error, {:recv_failed, reason}}
+                {:ok, response} -> {:ok, response}
               end
+          end
+        end
 
-            # TODO: add 'send failed'?
-            {:error, reason} ->
-              throw(reason)
+        def request!(conn, telegram) do
+          # Note: Usually and error means the connection is unusable afterwards
+          # (in the middle of a message is doesn't understand, etc).
+          # Users should usually fail/reconnect. So this is handy for that.
+          case request(conn, telegram) do
+            {:ok, response} -> response
+            {:error, reason} -> throw(reason)
           end
         end
       end
@@ -151,7 +152,7 @@ defmodule Protocols do
           # TOOD: other Opts for listen?
           case :gen_tcp.listen(port, [{:active, false}]) do
             {:error, reason} ->
-              {:stop, reason}
+              {:stop, {:listen_failed, reason}}
 
             {:ok, socket} ->
               {:ok, port} = :inet.port(socket)
@@ -178,8 +179,7 @@ defmodule Protocols do
               accept_loop(server_pid, listen_socket)
 
             {:error, reason} ->
-              # TODO: proper way to exit?
-              throw(reason)
+              Process.exit(self(), reason)
           end
         end
 
@@ -191,8 +191,6 @@ defmodule Protocols do
             {:error, reason} ->
               GenServer.cast(server_pid, {:session_failed, reason})
           end
-
-          :gen_tcp.close(socket)
         end
 
         defp serve_client(socket, session) do
@@ -201,14 +199,14 @@ defmodule Protocols do
               :ok
 
             {:error, reason} ->
-              {:error, reason}
+              {:error, {:receive_failed, reason}}
 
             {:ok, request} ->
               case handle_request(request, session) do
                 {:reply, response, session} ->
                   case TR.send(socket, response) do
                     :ok -> serve_client(socket, session)
-                    {:error, reason} -> {:error, reason}
+                    {:error, reason} -> {:error, {:send_failed, reason}}
                   end
               end
           end
