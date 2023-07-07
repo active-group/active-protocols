@@ -157,7 +157,12 @@ defmodule Protocols do
             {:ok, socket} ->
               {:ok, port} = :inet.port(socket)
               server = self()
-              {:ok, _pid} = Task.start_link(fn -> accept_loop(server, socket) end)
+              # possible supervisor options: :max_children
+              {:ok, session_supervisor} = Task.Supervisor.start_link()
+
+              {:ok, _pid} =
+                Task.start_link(fn -> accept_loop(server, session_supervisor, socket) end)
+
               {:ok, %State{port: port}}
           end
         end
@@ -171,12 +176,19 @@ defmodule Protocols do
           {:noreply, state}
         end
 
-        defp accept_loop(server_pid, listen_socket) do
+        defp accept_loop(server_pid, supervisor, listen_socket) do
           case :gen_tcp.accept(listen_socket) do
             {:ok, socket} ->
-              # TODO: link it only in one direction (don't fail server when session fails)
-              {:ok, _pid} = Task.start_link(fn -> run_session(server_pid, socket) end)
-              accept_loop(server_pid, listen_socket)
+              # Note: we want to close connections (sessions) when the server stops, but not the other way round.
+              # TODO: if we set max_children, start_child may return {:error, :max_children}; consider this? Maybe top accepting then
+              {:ok, _pid} =
+                Task.Supervisor.start_child(
+                  supervisor,
+                  fn -> run_session(server_pid, socket) end,
+                  [:temporary]
+                )
+
+              accept_loop(server_pid, supervisor, listen_socket)
 
             {:error, reason} ->
               Process.exit(self(), reason)
