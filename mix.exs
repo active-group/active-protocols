@@ -25,7 +25,7 @@ defmodule Protocols.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      # {:net_address, "~> 0.3.0"}
+      {:dialyxir, "~> 1.3", only: [:dev], runtime: false}
     ]
   end
 end

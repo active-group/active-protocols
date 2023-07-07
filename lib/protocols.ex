@@ -54,7 +54,7 @@ defmodule Protocols do
               case TG.parse(msg) do
                 {:ok, res} -> {:ok, res}
                 {:need_more, n} -> recv_cont(conn, msg, n)
-                {:error, reason} -> {:error, {:parse_failed, reason}}
+                {:error, reason} -> {:error, {:telegram_parse_failed, reason}}
               end
 
             # TODO: timeout, closed?
