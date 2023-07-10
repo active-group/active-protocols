@@ -14,6 +14,7 @@ defmodule Protocols do
 
     @callback send(connection, data) :: :ok | {:error, atom}
     @callback recv(connection, tmo) :: {:ok, data} | {:error, atom}
+    @callback close(connection) :: :ok
 
     defmacro __using__(_opts) do
       quote do
@@ -76,6 +77,11 @@ defmodule Protocols do
                 {:ok, :gen_tcp.socket()} | {:error, :timeout} | {:error, :inet.posix()}
         def connect(addr, port, timeout),
           do: :gen_tcp.connect(addr, port, [active: false], timeout)
+
+        @impl Transport
+        def close(socket) do
+          :gen_tcp.close(socket)
+        end
       end
     end
   end
@@ -133,10 +139,11 @@ defmodule Protocols do
     @type session :: term
     # :inet.socket something
     @type socket :: term
+    @type socket_info :: term
 
     @callback init_session(socket) :: session
     @callback handle_request(request, session) :: {:reply, response, session}
-    @callback handle_session_error(term, socket) :: :ok
+    @callback handle_session_error(term, socket_info) :: :ok
 
     defmodule State do
       defstruct [:port, :max_sessions]
@@ -179,8 +186,9 @@ defmodule Protocols do
         def handle_call(:get_port, _from, state), do: {:reply, state.port, state}
 
         @impl GenServer
-        def handle_cast({:session_failed, reason, socket}, state) do
-          :ok = handle_session_error(reason, socket)
+        def handle_cast({:session_failed, reason, info}, state) do
+          # Allow handle_session_error to change state?
+          :ok = handle_session_error(reason, info)
           {:noreply, state}
         end
 
@@ -211,7 +219,9 @@ defmodule Protocols do
               nil
 
             {:error, reason} ->
-              GenServer.cast(server_pid, {:session_failed, reason, socket})
+              info = :inet.peername(socket)
+              :ok = TR.close(socket)
+              GenServer.cast(server_pid, {:session_failed, reason, info})
           end
         end
 

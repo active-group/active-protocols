@@ -38,8 +38,18 @@ defmodule ExampleTelegrams do
     end
   end
 
+  defmodule InvalidTelegram do
+    # A telegram that can be send, but not be parsed.
+    use Telegrams.T
+
+    defstruct []
+
+    def parse(_bytes), do: {:error, :parse_failed}
+
+    def unparse(_v), do: <<42>>
+  end
+
   defmodule Telegram do
-    # , modules: [Telegram1, Telegram2]
     use Telegrams.Modules
 
     def parse(bytes) do
