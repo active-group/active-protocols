@@ -10,9 +10,10 @@ defmodule Protocols do
     """
     @type connection :: term
     @type data :: term
+    @type tmo :: :gen_tcp.timeout()
 
     @callback send(connection, data) :: :ok | {:error, atom}
-    @callback recv(connection) :: {:ok, data} | {:error, atom}
+    @callback recv(connection, tmo) :: {:ok, data} | {:error, atom}
 
     defmacro __using__(_opts) do
       quote do
@@ -37,40 +38,44 @@ defmodule Protocols do
 
         alias unquote(opts[:telegrams]), as: TG
 
-        # TODO: Take a min-telegram-length for more efficient first recv?
+        @min_length (case(TG.parse(<<>>)) do
+                       {:need_more, n} -> n
+                       _ -> 1
+                     end)
 
         @impl Transport
+        @spec send(:gen_tcp.socket(), term) :: :ok | {:error, atom}
         def send(conn, telegram) do
-          # TODO: use send_timeout?
           :gen_tcp.send(conn, TG.unparse(telegram))
         end
 
-        defp recv_cont(conn, acc, need) do
-          # TODO: timeouts, flags
-          case :gen_tcp.recv(conn, need) do
+        defp recv_cont(conn, acc, need, timeout) do
+          case :gen_tcp.recv(conn, need, timeout) do
             {:ok, data} ->
               msg = acc <> :binary.list_to_bin(data)
 
               case TG.parse(msg) do
                 {:ok, res} -> {:ok, res}
-                {:need_more, n} -> recv_cont(conn, msg, n)
+                {:need_more, n} -> recv_cont(conn, msg, n, timeout)
                 {:error, reason} -> {:error, {:telegram_parse_failed, reason}}
               end
 
-            # TODO: timeout, closed?
             {:error, reason} ->
               {:error, reason}
           end
         end
 
         @impl Transport
-        def recv(conn) do
-          recv_cont(conn, <<>>, 1)
+        @spec send(:gen_tcp.socket(), :gen_tcp.timeout()) :: {:ok, term} | {:error, atom}
+        def recv(conn, timeout) do
+          # Note: the timeout may be 'applied' multiple times, i.e. it represents a minimum time before {:error, :timeout} is returned.
+          recv_cont(conn, <<>>, @min_length, timeout)
         end
 
+        @spec connect(:gen_tcp.address(), :gen_tcp.port(), :gen_tcp.timeout()) ::
+                {:ok, :gen_tcp.socket()} | {:error, :timeout} | {:error, :inet.posix()}
         def connect(addr, port, timeout),
-          # TODO: Opts
-          do: :gen_tcp.connect(addr, port, [{:active, false}], timeout)
+          do: :gen_tcp.connect(addr, port, [active: false], timeout)
       end
     end
   end
@@ -87,24 +92,24 @@ defmodule Protocols do
       quote do
         alias unquote(opts[:transport]), as: TR
 
-        def request(conn, telegram) do
+        def request(conn, telegram, response_timeout) do
           case TR.send(conn, telegram) do
             {:error, reason} ->
               {:error, {:send_failed, reason}}
 
             :ok ->
-              case TR.recv(conn) do
+              case TR.recv(conn, response_timeout) do
                 {:error, reason} -> {:error, {:recv_failed, reason}}
                 {:ok, response} -> {:ok, response}
               end
           end
         end
 
-        def request!(conn, telegram) do
+        def request!(conn, telegram, response_timeout) do
           # Note: Usually and error means the connection is unusable afterwards
           # (in the middle of a message is doesn't understand, etc).
           # Users should usually fail/reconnect. So this is handy for that.
-          case request(conn, telegram) do
+          case request(conn, telegram, response_timeout) do
             {:ok, response} -> response
             {:error, reason} -> throw(reason)
           end
@@ -131,15 +136,13 @@ defmodule Protocols do
 
     @callback init_session(socket) :: session
     @callback handle_request(request, session) :: {:reply, response, session}
-    # TODO: some info about client? callback or message?
-    @callback handle_session_error(term) :: :ok
+    @callback handle_session_error(term, socket) :: :ok
 
     defmodule State do
-      defstruct [:port]
+      defstruct [:port, :max_sessions]
     end
 
     defmacro __using__(opts) do
-      # TODO: ensure opts[:transport] is set, and is a module implementing Transport?
       quote do
         @behaviour ReqResServer
 
@@ -148,9 +151,14 @@ defmodule Protocols do
         alias unquote(opts[:transport]), as: TR
 
         @impl GenServer
-        def init(port) do
-          # TOOD: other Opts for listen?
-          case :gen_tcp.listen(port, [{:active, false}]) do
+        def init(args) do
+          port = args[:port]
+          max_sessions = args[:max_sessions]
+          # gen_tcp:address()
+          bind_addr = args[:bind_address]
+
+          # TOOD: add address/adapter to listen on
+          case :gen_tcp.listen(port, active: false, ip: bind_addr) do
             {:error, reason} ->
               {:stop, {:listen_failed, reason}}
 
@@ -163,7 +171,7 @@ defmodule Protocols do
               {:ok, _pid} =
                 Task.start_link(fn -> accept_loop(server, session_supervisor, socket) end)
 
-              {:ok, %State{port: port}}
+              {:ok, %State{port: port, max_sessions: max_sessions}}
           end
         end
 
@@ -171,8 +179,8 @@ defmodule Protocols do
         def handle_call(:get_port, _from, state), do: {:reply, state.port, state}
 
         @impl GenServer
-        def handle_cast({:session_failed, reason}, state) do
-          :ok = handle_session_error(reason)
+        def handle_cast({:session_failed, reason, socket}, state) do
+          :ok = handle_session_error(reason, socket)
           {:noreply, state}
         end
 
@@ -180,7 +188,7 @@ defmodule Protocols do
           case :gen_tcp.accept(listen_socket) do
             {:ok, socket} ->
               # Note: we want to close connections (sessions) when the server stops, but not the other way round.
-              # TODO: if we set max_children, start_child may return {:error, :max_children}; consider this? Maybe top accepting then
+
               {:ok, _pid} =
                 Task.Supervisor.start_child(
                   supervisor,
@@ -188,6 +196,8 @@ defmodule Protocols do
                   [:temporary]
                 )
 
+              # TODO: limit the number of active session? Stop accepting then or limit the supervisor?
+              # if Enum.size(Task.Supervisor.children(supervisor)) < max_sessions ...  what could be the else here?
               accept_loop(server_pid, supervisor, listen_socket)
 
             {:error, reason} ->
@@ -201,12 +211,13 @@ defmodule Protocols do
               nil
 
             {:error, reason} ->
-              GenServer.cast(server_pid, {:session_failed, reason})
+              GenServer.cast(server_pid, {:session_failed, reason, socket})
           end
         end
 
         defp serve_client(socket, session) do
-          case TR.recv(socket) do
+          # TODO: configurable timeout?
+          case TR.recv(socket, 10 * 1000) do
             {:error, :closed} ->
               :ok
 

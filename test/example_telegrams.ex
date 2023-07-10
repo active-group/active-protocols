@@ -39,14 +39,16 @@ defmodule ExampleTelegrams do
   end
 
   defmodule Telegram do
-    use Telegrams.Modules, modules: [Telegram1, Telegram2]
+    # , modules: [Telegram1, Telegram2]
+    use Telegrams.Modules
 
     def parse(bytes) do
       case bytes do
+        # determine min of all?
+        <<>> -> {:need_more, 1}
         <<1, _::binary>> -> Telegram1.parse(bytes)
         <<2, _::binary>> -> Telegram2.parse(bytes)
-        <<>> -> {:need_more, 1}
-        _ -> {:error, :parse_failed}
+        <<cmd, _::binary>> -> {:error, {:unknown_command, cmd}}
       end
     end
   end

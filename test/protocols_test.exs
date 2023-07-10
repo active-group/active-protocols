@@ -29,7 +29,7 @@ defmodule ProtocolsTest do
     end
 
     @impl true
-    def handle_session_error(reason) do
+    def handle_session_error(reason, _socket) do
       IO.inspect(reason, label: "Client session failed")
       # called on parse errors, for logging, etc.
       :ok
@@ -44,16 +44,17 @@ defmodule ProtocolsTest do
     alias ExampleTelegrams.Telegram1
     alias ExampleTelegrams.Telegram2
 
-    {:ok, pid} = GenServer.start_link(Server, 0)
+    {:ok, pid} =
+      GenServer.start_link(Server, port: 0, max_sessions: 5, bind_address: {0, 0, 0, 0})
 
     port = GenServer.call(pid, :get_port)
 
-    {:ok, conn} = TelegramTransport.connect({127, 0, 0, 1}, port, 1000)
+    {:ok, conn} = TelegramTransport.connect({127, 0, 0, 1}, port, 100)
 
-    assert Client.request!(conn, %Telegram1{message: "Fo"}) ==
+    assert Client.request!(conn, %Telegram1{message: "Fo"}, 100) ==
              %Telegram2{counter: 0}
 
-    assert Client.request!(conn, %Telegram1{message: "Ba"}) ==
+    assert Client.request!(conn, %Telegram1{message: "Ba"}, 100) ==
              %Telegram2{counter: 1}
 
     # TODO test errors
