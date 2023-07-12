@@ -1,4 +1,4 @@
-defmodule Protocols do
+defmodule Active.Protocols do
   @moduledoc """
   Utilities to implement communication protocols over the transport of telegrams.
   """

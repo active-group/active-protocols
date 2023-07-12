@@ -1,6 +1,6 @@
 defmodule ExampleTelegrams do
   defmodule Telegram1 do
-    use Telegrams.T
+    use Active.Telegrams.T
 
     defstruct [:message]
 
@@ -20,7 +20,7 @@ defmodule ExampleTelegrams do
   end
 
   defmodule Telegram2 do
-    use Telegrams.T
+    use Active.Telegrams.T
 
     defstruct [:counter]
 
@@ -40,7 +40,7 @@ defmodule ExampleTelegrams do
 
   defmodule InvalidTelegram do
     # A telegram that can be send, but not be decoded.
-    use Telegrams.T
+    use Active.Telegrams.T
 
     defstruct []
 
@@ -50,7 +50,7 @@ defmodule ExampleTelegrams do
   end
 
   defmodule Telegram do
-    use Telegrams.Modules
+    use Active.Telegrams.Modules
 
     def decode(bytes) do
       case bytes do

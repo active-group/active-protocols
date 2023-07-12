@@ -1,4 +1,4 @@
-defmodule Telegrams do
+defmodule Active.Telegrams do
   defmodule T do
     @callback decode(binary) :: {:ok, term} | {:need_more, integer} | {:error, atom}
 

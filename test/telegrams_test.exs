@@ -3,6 +3,8 @@ defmodule TelegramsTest do
 
   require ExampleTelegrams
 
+  alias Active.Telegrams
+
   doctest Telegrams
 
   ############################################################

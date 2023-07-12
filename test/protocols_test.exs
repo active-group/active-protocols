@@ -2,6 +2,8 @@ defmodule ProtocolsTest do
   use ExUnit.Case
   import ExampleTelegrams
 
+  alias Active.Protocols
+
   doctest Protocols
 
   defmodule TelegramTransport do
