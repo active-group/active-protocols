@@ -26,7 +26,7 @@ defmodule Protocols do
   defmodule TCPTransport do
     @moduledoc """
     A behaviour for modules that adds the Transport behaviour using a Socket connection
-    and a module with the Telegram behaviour to parse and unparse binaries.
+    and a module with the Telegram behaviour to encode and decode binaries.
 
     ```
     use TCPTransport, telegrams: TelegramModule
@@ -39,7 +39,7 @@ defmodule Protocols do
 
         alias unquote(opts[:telegrams]), as: TG
 
-        @min_length (case(TG.parse(<<>>)) do
+        @min_length (case(TG.decode(<<>>)) do
                        {:need_more, n} -> n
                        _ -> 1
                      end)
@@ -47,7 +47,7 @@ defmodule Protocols do
         @impl Transport
         @spec send(:gen_tcp.socket(), term) :: :ok | {:error, atom}
         def send(conn, telegram) do
-          :gen_tcp.send(conn, TG.unparse(telegram))
+          :gen_tcp.send(conn, TG.encode(telegram))
         end
 
         defp recv_cont(conn, acc, need, timeout) do
@@ -55,10 +55,10 @@ defmodule Protocols do
             {:ok, data} ->
               msg = acc <> :binary.list_to_bin(data)
 
-              case TG.parse(msg) do
+              case TG.decode(msg) do
                 {:ok, res} -> {:ok, res}
                 {:need_more, n} -> recv_cont(conn, msg, n, timeout)
-                {:error, reason} -> {:error, {:telegram_parse_failed, reason}}
+                {:error, reason} -> {:error, {:telegram_decode_failed, reason}}
               end
 
             {:error, reason} ->

@@ -31,7 +31,7 @@ defmodule ProtocolsTest do
     @impl true
     def handle_session_error(reason, info) do
       IO.inspect([reason, info], label: "Client session failed")
-      # called on parse errors, for logging, etc.
+      # called on decode errors, for logging, etc.
       :ok
     end
   end

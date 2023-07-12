@@ -1,8 +1,8 @@
 defmodule Telegrams do
   defmodule T do
-    @callback parse(binary) :: {:ok, term} | {:need_more, integer} | {:error, atom}
+    @callback decode(binary) :: {:ok, term} | {:need_more, integer} | {:error, atom}
 
-    @callback unparse(term) :: nonempty_binary()
+    @callback encode(term) :: nonempty_binary()
 
     defmacro __using__(_opts) do
       quote do
@@ -17,8 +17,8 @@ defmodule Telegrams do
         use T
 
         @impl T
-        def unparse(value) do
-          apply(value.__struct__, :unparse, [value])
+        def encode(value) do
+          apply(value.__struct__, :encode, [value])
         end
       end
     end
