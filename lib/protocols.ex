@@ -143,8 +143,8 @@ defmodule Active.Protocols do
     @type socket :: term
     @type socket_info :: term
 
-    @callback init_session(pid, socket) :: session
-    @callback handle_request(request, session) :: {:reply, response, session}
+    @callback init_session(pid, socket, term) :: session
+    @callback handle_request(request, session, term) :: {:reply, response, session}
     @callback handle_session_error(term, socket_info) :: :ok
 
     defmodule State do
@@ -166,6 +166,8 @@ defmodule Active.Protocols do
           max_sessions = args[:max_sessions]
           # gen_tcp:address()
           bind_addr = args[:bind_address]
+          # curstom args passed to handle_request and the other callbacks
+          args = args[:args]
 
           # TOOD: add address/adapter to listen on
           case :gen_tcp.listen(port, active: false, ip: bind_addr) do
@@ -179,7 +181,7 @@ defmodule Active.Protocols do
               {:ok, session_supervisor} = Task.Supervisor.start_link()
 
               {:ok, _pid} =
-                Task.start_link(fn -> accept_loop(server, session_supervisor, socket) end)
+                Task.start_link(fn -> accept_loop(server, session_supervisor, socket, args) end)
 
               {:ok, %State{port: port, max_sessions: max_sessions}}
           end
@@ -195,7 +197,7 @@ defmodule Active.Protocols do
           {:noreply, state}
         end
 
-        defp accept_loop(server_pid, supervisor, listen_socket) do
+        defp accept_loop(server_pid, supervisor, listen_socket, args) do
           case :gen_tcp.accept(listen_socket) do
             {:ok, socket} ->
               # Note: we want to close connections (sessions) when the server stops, but not the other way round.
@@ -203,21 +205,21 @@ defmodule Active.Protocols do
               {:ok, _pid} =
                 Task.Supervisor.start_child(
                   supervisor,
-                  fn -> run_session(server_pid, socket) end,
-                  [:temporary]
+                  fn -> run_session(server_pid, socket, args) end,
+                  restart: :temporary
                 )
 
               # TODO: limit the number of active session? Stop accepting then or limit the supervisor?
               # if Enum.size(Task.Supervisor.children(supervisor)) < max_sessions ...  what could be the else here?
-              accept_loop(server_pid, supervisor, listen_socket)
+              accept_loop(server_pid, supervisor, listen_socket, args)
 
             {:error, reason} ->
               Process.exit(self(), reason)
           end
         end
 
-        defp run_session(server_pid, socket) do
-          case serve_client(socket, init_session(server_pid, socket)) do
+        defp run_session(server_pid, socket, args) do
+          case serve_client(socket, init_session(server_pid, socket, args), args) do
             :ok ->
               nil
 
@@ -228,7 +230,7 @@ defmodule Active.Protocols do
           end
         end
 
-        defp serve_client(socket, session) do
+        defp serve_client(socket, session, args) do
           # TODO: configurable timeout?
           case TR.recv(socket, 10 * 1000) do
             {:error, :closed} ->
@@ -238,10 +240,10 @@ defmodule Active.Protocols do
               {:error, {:receive_failed, reason}}
 
             {:ok, request} ->
-              case handle_request(request, session) do
+              case handle_request(request, session, args) do
                 {:reply, response, session} ->
                   case TR.send(socket, response) do
-                    :ok -> serve_client(socket, session)
+                    :ok -> serve_client(socket, session, args)
                     {:error, reason} -> {:error, {:send_failed, reason}}
                   end
               end
