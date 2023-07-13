@@ -14,7 +14,7 @@ defmodule ProtocolsTest do
     use Protocols.ReqResServer, transport: TelegramTransport
 
     @impl true
-    def init_session(_socket) do
+    def init_session(_server_pid, _socket) do
       # a counter as the session state
       0
     end

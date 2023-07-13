@@ -10,7 +10,8 @@ defmodule Active.Protocols do
     """
     @type connection :: term
     @type data :: term
-    @type tmo :: :gen_tcp.timeout()
+    # :gen_tcp.timeout()
+    @type tmo :: term
 
     @callback send(connection, data) :: :ok | {:error, atom}
     @callback recv(connection, tmo) :: {:ok, data} | {:error, atom}
@@ -36,6 +37,7 @@ defmodule Active.Protocols do
     defmacro __using__(opts) do
       quote do
         use Transport
+        # import :erlang, only: [gen_tcp: 0]
 
         alias unquote(opts[:telegrams]), as: TG
 
@@ -45,7 +47,7 @@ defmodule Active.Protocols do
                      end)
 
         @impl Transport
-        @spec send(:gen_tcp.socket(), term) :: :ok | {:error, atom}
+        # @spec send(:gen_tcp.socket(), term) :: :ok | {:error, atom}
         def send(conn, telegram) do
           :gen_tcp.send(conn, TG.encode(telegram))
         end
@@ -67,7 +69,7 @@ defmodule Active.Protocols do
         end
 
         @impl Transport
-        @spec send(:gen_tcp.socket(), :gen_tcp.timeout()) :: {:ok, term} | {:error, atom}
+        # @spec send(:gen_tcp.socket(), :gen_tcp.timeout()) :: {:ok, term} | {:error, atom}
         def recv(conn, timeout) do
           # Note: the timeout may be 'applied' multiple times, i.e. it represents a minimum time before {:error, :timeout} is returned.
           recv_cont(conn, <<>>, @min_length, timeout)
@@ -141,7 +143,7 @@ defmodule Active.Protocols do
     @type socket :: term
     @type socket_info :: term
 
-    @callback init_session(socket) :: session
+    @callback init_session(pid, socket) :: session
     @callback handle_request(request, session) :: {:reply, response, session}
     @callback handle_session_error(term, socket_info) :: :ok
 
@@ -154,6 +156,7 @@ defmodule Active.Protocols do
         @behaviour ReqResServer
 
         use GenServer
+        # import :erlang, only: [gen_tcp: 0]
 
         alias unquote(opts[:transport]), as: TR
 
@@ -214,7 +217,7 @@ defmodule Active.Protocols do
         end
 
         defp run_session(server_pid, socket) do
-          case serve_client(socket, init_session(socket)) do
+          case serve_client(socket, init_session(server_pid, socket)) do
             :ok ->
               nil
 

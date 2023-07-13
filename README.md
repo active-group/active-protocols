@@ -10,7 +10,7 @@ by adding `protocols` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:protocols, "~> 0.1.0"}
+    {:protocols, git: "git@github.com:active-group/active-protocols.git", branch: "main"}
   ]
 end
 ```
