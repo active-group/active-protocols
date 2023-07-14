@@ -3,84 +3,77 @@ defmodule Active.Protocols do
   Utilities to implement communication protocols over the transport of telegrams.
   """
 
-  defmodule Transport do
+  defmodule SocketTransport do
     @moduledoc """
-    A behaviour for modules that can send and receive some
-    pieces of data over some kind of connection.
+    Functions to send telegrams over a socket.
+
+    You can also use this module to get specialized send and recv functions:
+
+    ```
+    use SocketTransport, telegrams: TelegramModule
+    ```
     """
-    @type connection :: term
-    @type data :: term
 
-    @callback send(connection, data) :: :ok | {:error, atom}
-    @callback recv(connection, timeout()) :: {:ok, data} | {:error, atom}
-    @callback close(connection) :: :ok
+    @type socket :: :gen_tcp.socket()
+    @type telegram :: term()
+    # t_module should have behaviour Telegram.T
+    @type t_module :: module()
 
-    defmacro __using__(_opts) do
-      quote do
-        @behaviour Transport
+    def connect_opts(), do: [active: false]
+
+    @spec send(socket, t_module, telegram) :: :ok | {:error, atom}
+    def send(socket, module, telegram) do
+      data = apply(module, :encode, [telegram])
+      :gen_tcp.send(socket, data)
+    end
+
+    @spec recv(socket, t_module, timeout) :: {:ok, telegram} | {:error, atom}
+    @doc "Note: the timeout may be 'applied' multiple times, i.e. it represents a minimum time before {:error, :timeout} is returned."
+    def recv(socket, module, timeout) do
+      min_length = get_min_length(module)
+      recv_cont(socket, module, <<>>, min_length, timeout)
+    end
+
+    defp get_min_length(module) do
+      case apply(module, :decode, [<<>>]) do
+        {:need_more, n} -> n
+        _ -> 1
       end
     end
-  end
 
-  defmodule TCPTransport do
-    @moduledoc """
-    A behaviour for modules that adds the Transport behaviour using a Socket connection
-    and a module with the Telegram behaviour to encode and decode binaries.
+    defp recv_cont(socket, module, acc, need, timeout) do
+      case :gen_tcp.recv(socket, need, timeout) do
+        {:ok, data} ->
+          msg = acc <> :binary.list_to_bin(data)
 
-    ```
-    use TCPTransport, telegrams: TelegramModule
-    ```
-    """
+          case apply(module, :decode, [msg]) do
+            {:ok, res} -> {:ok, res}
+            {:need_more, n} -> recv_cont(socket, module, msg, n, timeout)
+            {:error, reason} -> {:error, {:telegram_decode_failed, reason}}
+          end
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
 
     defmacro __using__(opts) do
       quote do
-        use Transport
-        # import :erlang, only: [gen_tcp: 0]
-
         alias unquote(opts[:telegrams]), as: TG
 
-        @min_length (case(TG.decode(<<>>)) do
-                       {:need_more, n} -> n
-                       _ -> 1
-                     end)
+        @type socket :: :gen_tcp.socket()
+        # TODO: TG.t()
+        @type telegram :: term
 
-        @impl Transport
-        # @spec send(:gen_tcp.socket(), term) :: :ok | {:error, atom}
-        def send(conn, telegram) do
-          :gen_tcp.send(conn, TG.encode(telegram))
+        @spec send(socket, telegram) :: :ok | {:error, atom}
+        def send(socket, telegram) do
+          SocketTransport.send(socket, TG, telegram)
         end
 
-        defp recv_cont(conn, acc, need, timeout) do
-          case :gen_tcp.recv(conn, need, timeout) do
-            {:ok, data} ->
-              msg = acc <> :binary.list_to_bin(data)
-
-              case TG.decode(msg) do
-                {:ok, res} -> {:ok, res}
-                {:need_more, n} -> recv_cont(conn, msg, n, timeout)
-                {:error, reason} -> {:error, {:telegram_decode_failed, reason}}
-              end
-
-            {:error, reason} ->
-              {:error, reason}
-          end
-        end
-
-        @impl Transport
-        # @spec send(:gen_tcp.socket(), :gen_tcp.timeout()) :: {:ok, term} | {:error, atom}
-        def recv(conn, timeout) do
-          # Note: the timeout may be 'applied' multiple times, i.e. it represents a minimum time before {:error, :timeout} is returned.
-          recv_cont(conn, <<>>, @min_length, timeout)
-        end
-
-        @spec connect(:inet.socket_address(), :inet.port_number(), timeout()) ::
-                {:ok, :gen_tcp.socket()} | {:error, :timeout} | {:error, :inet.posix()}
-        def connect(addr, port, timeout),
-          do: :gen_tcp.connect(addr, port, [active: false], timeout)
-
-        @impl Transport
-        def close(socket) do
-          :gen_tcp.close(socket)
+        @spec recv(socket, timeout) :: {:ok, telegram} | {:error, atom}
+        def recv(socket, timeout) do
+          # Note: we could optimize determining the min_length at compile time.
+          SocketTransport.recv(socket, TG, timeout)
         end
       end
     end
@@ -88,37 +81,62 @@ defmodule Active.Protocols do
 
   defmodule ReqResClient do
     @moduledoc """
-    A behaviour for modules to act as a client module in a request-response based protocol, given a Transport module.
+    Functions to send requests and wait for responses over a socket.
+
+    You can also use this module to inject a simplified API
 
     ```
-    use ReqResClient, transport: MyTransportModule
+    use ReqResClient, telegrams: TelegramModule
     ```
     """
+
+    @type socket :: :gen_tcp.socket()
+    @type telegram :: term()
+    # t_module should have behaviour Telegram.T
+    @type t_module :: module()
+
+    @spec request(socket, t_module, telegram, timeout) ::
+            :ok | {:error, {:send_failed, term}} | {:error, {:recv_failed, term}}
+    def request(socket, module, telegram, response_timeout) do
+      case SocketTransport.send(socket, module, telegram) do
+        {:error, reason} ->
+          {:error, {:send_failed, reason}}
+
+        :ok ->
+          case SocketTransport.recv(socket, module, response_timeout) do
+            {:error, reason} -> {:error, {:recv_failed, reason}}
+            {:ok, response} -> {:ok, response}
+          end
+      end
+    end
+
+    @spec connect(:inet.socket_address(), :inet.port_number(), timeout()) ::
+            {:ok, socket} | {:error, :timeout} | {:error, :inet.posix()}
+    def connect(addr, port, timeout) do
+      # TODO: check arguments; this really like to throw einval
+      opts = SocketTransport.connect_opts()
+      :gen_tcp.connect(addr, port, opts, timeout)
+    end
+
     defmacro __using__(opts) do
       quote do
-        alias unquote(opts[:transport]), as: TR
+        alias unquote(opts[:telegrams]), as: TG
 
-        def request(conn, telegram, response_timeout) do
-          case TR.send(conn, telegram) do
-            {:error, reason} ->
-              {:error, {:send_failed, reason}}
+        # Note: we could inject a specialized SocketTransport module here, for optimization.
+        @type socket :: :gen_tcp.socket()
+        # TODO: TG.t() ?
+        @type telegram :: term()
 
-            :ok ->
-              case TR.recv(conn, response_timeout) do
-                {:error, reason} -> {:error, {:recv_failed, reason}}
-                {:ok, response} -> {:ok, response}
-              end
-          end
+        @spec request(socket, telegram, timeout) ::
+                :ok | {:error, {:send_failed, term}} | {:error, {:recv_failed, term}}
+        def request(socket, telegram, response_timeout) do
+          ReqResClient.request(socket, TG, telegram, response_timeout)
         end
 
-        def request!(conn, telegram, response_timeout) do
-          # Note: Usually and error means the connection is unusable afterwards
-          # (in the middle of a message is doesn't understand, etc).
-          # Users should usually fail/reconnect. So this is handy for that.
-          case request(conn, telegram, response_timeout) do
-            {:ok, response} -> response
-            {:error, reason} -> throw(reason)
-          end
+        @spec connect(:inet.socket_address(), :inet.port_number(), timeout()) ::
+                {:ok, socket} | {:error, :timeout} | {:error, :inet.posix()}
+        def connect(addr, port, timeout) do
+          ReqResClient.connect(addr, port, timeout)
         end
       end
     end
@@ -126,126 +144,145 @@ defmodule Active.Protocols do
 
   defmodule ReqResServer do
     @moduledoc """
-    A GenServer behaviour for modules to act as a server module in a request-response
-    based protocol, given a Transport module.
+    A behaviour to inject the server side of a request-response
+    based protocol over telegrams.
 
     ```
-    use ReqResClient, transport: MyTransportModule
+    use ReqResClient, telegrams: TelegramModule
     ```
     """
 
-    @type request :: term
-    @type response :: term
+    @type telegram :: term
+    @type request :: telegram
+    @type response :: telegram
     @type session :: term
-    # :inet.socket something
-    @type socket :: term
-    @type socket_info :: term
+    @type socket :: :gen_tcp.socket()
 
-    @callback init_session(pid, socket, term) :: session
-    @callback handle_request(request, session, term) :: {:reply, response, session}
-    @callback handle_session_error(term, socket_info) :: :ok
+    @type user_arg :: term
 
-    defmodule State do
-      defstruct [:port, :max_sessions]
+    @callback init_session(socket, user_arg) :: session
+
+    @callback handle_request(request, session, user_arg) :: {:reply, response, session}
+
+    @callback handle_session_error(socket, term) :: :ok
+
+    def get_port(pid) do
+      GenServer.call(pid, :get_port)
+    end
+
+    defmodule Server do
+      use GenServer
+
+      defmodule State do
+        defstruct [:port]
+      end
+
+      @impl GenServer
+      def init(args) do
+        # t_module should be a SocketTransport
+        t_module = args[:transport_module]
+        # rrs_module should be a ReqResServer
+        rrs_module = args[:module]
+        port = args[:port]
+        bind_addr = args[:bind_address]
+        user_arg = args[:user_arg]
+
+        case :gen_tcp.listen(port, active: false, ip: bind_addr) do
+          {:error, reason} ->
+            {:stop, {:listen_failed, reason}}
+
+          {:ok, socket} ->
+            {:ok, port} = :inet.port(socket)
+            server = self()
+
+            {:ok, session_supervisor} = Task.Supervisor.start_link()
+
+            {:ok, _pid} =
+              Task.start_link(fn ->
+                accept_loop(server, session_supervisor, rrs_module, t_module, socket, user_arg)
+              end)
+
+            {:ok, %State{port: port}}
+        end
+      end
+
+      @impl GenServer
+      def handle_call(:get_port, _from, state), do: {:reply, state.port, state}
+
+      defp accept_loop(server, session_supervisor, rrs_module, t_module, listen_socket, user_arg) do
+        case :gen_tcp.accept(listen_socket) do
+          {:ok, socket} ->
+            # Note: we want to close connections (sessions) when the server stops, but not the other way round.
+            {:ok, _pid} =
+              Task.Supervisor.start_child(
+                session_supervisor,
+                fn -> run_session(socket, rrs_module, t_module, user_arg) end,
+                restart: :temporary
+              )
+
+            accept_loop(server, session_supervisor, rrs_module, t_module, listen_socket, user_arg)
+
+          {:error, reason} ->
+            Process.exit(self(), reason)
+        end
+      end
+
+      defp run_session(socket, rrs_module, t_module, user_arg) do
+        session = apply(rrs_module, :init_session, [socket, user_arg])
+
+        case serve_client(socket, session, rrs_module, t_module, user_arg) do
+          :ok ->
+            nil
+
+          {:error, reason} ->
+            apply(rrs_module, :handle_session_error, [socket, reason])
+            :ok = :gen_tcp.close(socket)
+        end
+      end
+
+      defp serve_client(socket, session, rrs_module, t_module, user_arg) do
+        # TODO: configurable timeout?
+
+        case apply(t_module, :recv, [socket, 10 * 1000]) do
+          {:error, :closed} ->
+            :ok
+
+          {:error, reason} ->
+            {:error, {:receive_failed, reason}}
+
+          {:ok, request} ->
+            case apply(rrs_module, :handle_request, [request, session, user_arg]) do
+              {:reply, response, session} ->
+                case apply(t_module, :send, [socket, response]) do
+                  :ok -> serve_client(socket, session, rrs_module, t_module, user_arg)
+                  {:error, reason} -> {:error, {:send_failed, reason}}
+                end
+            end
+        end
+      end
     end
 
     defmacro __using__(opts) do
       quote do
         @behaviour ReqResServer
 
-        use GenServer
-        # import :erlang, only: [gen_tcp: 0]
-
-        alias unquote(opts[:transport]), as: TR
-
-        @impl GenServer
-        def init(args) do
-          port = args[:port]
-          max_sessions = args[:max_sessions]
-          # gen_tcp:address()
-          bind_addr = args[:bind_address]
-          # curstom args passed to handle_request and the other callbacks
-          args = args[:args]
-
-          # TOOD: add address/adapter to listen on
-          case :gen_tcp.listen(port, active: false, ip: bind_addr) do
-            {:error, reason} ->
-              {:stop, {:listen_failed, reason}}
-
-            {:ok, socket} ->
-              {:ok, port} = :inet.port(socket)
-              server = self()
-              # possible supervisor options: :max_children
-              {:ok, session_supervisor} = Task.Supervisor.start_link()
-
-              {:ok, _pid} =
-                Task.start_link(fn -> accept_loop(server, session_supervisor, socket, args) end)
-
-              {:ok, %State{port: port, max_sessions: max_sessions}}
-          end
+        defmodule Transport do
+          use SocketTransport, telegrams: unquote(opts[:telegrams])
         end
 
-        @impl GenServer
-        def handle_call(:get_port, _from, state), do: {:reply, state.port, state}
-
-        @impl GenServer
-        def handle_cast({:session_failed, reason, info}, state) do
-          # Allow handle_session_error to change state?
-          :ok = handle_session_error(reason, info)
-          {:noreply, state}
+        @doc "Starts the server listening on the given address and port. Port can be 0 to pick an arbitrary free port."
+        def start_link(bind_address, port, arg) do
+          GenServer.start_link(Server,
+            bind_address: bind_address,
+            port: port,
+            module: __MODULE__,
+            user_arg: arg,
+            transport_module: Transport
+          )
         end
 
-        defp accept_loop(server_pid, supervisor, listen_socket, args) do
-          case :gen_tcp.accept(listen_socket) do
-            {:ok, socket} ->
-              # Note: we want to close connections (sessions) when the server stops, but not the other way round.
-
-              {:ok, _pid} =
-                Task.Supervisor.start_child(
-                  supervisor,
-                  fn -> run_session(server_pid, socket, args) end,
-                  restart: :temporary
-                )
-
-              # TODO: limit the number of active session? Stop accepting then or limit the supervisor?
-              # if Enum.size(Task.Supervisor.children(supervisor)) < max_sessions ...  what could be the else here?
-              accept_loop(server_pid, supervisor, listen_socket, args)
-
-            {:error, reason} ->
-              Process.exit(self(), reason)
-          end
-        end
-
-        defp run_session(server_pid, socket, args) do
-          case serve_client(socket, init_session(server_pid, socket, args), args) do
-            :ok ->
-              nil
-
-            {:error, reason} ->
-              info = :inet.peername(socket)
-              :ok = TR.close(socket)
-              GenServer.cast(server_pid, {:session_failed, reason, info})
-          end
-        end
-
-        defp serve_client(socket, session, args) do
-          # TODO: configurable timeout?
-          case TR.recv(socket, 10 * 1000) do
-            {:error, :closed} ->
-              :ok
-
-            {:error, reason} ->
-              {:error, {:receive_failed, reason}}
-
-            {:ok, request} ->
-              case handle_request(request, session, args) do
-                {:reply, response, session} ->
-                  case TR.send(socket, response) do
-                    :ok -> serve_client(socket, session, args)
-                    {:error, reason} -> {:error, {:send_failed, reason}}
-                  end
-              end
-          end
+        def get_port(pid) do
+          ReqResServer.get_port(pid)
         end
       end
     end

@@ -6,15 +6,11 @@ defmodule ProtocolsTest do
 
   doctest Protocols
 
-  defmodule TelegramTransport do
-    use Protocols.TCPTransport, telegrams: ExampleTelegrams.Telegram
-  end
-
   defmodule Server do
-    use Protocols.ReqResServer, transport: TelegramTransport
+    use Protocols.ReqResServer, telegrams: ExampleTelegrams.Telegram
 
     @impl true
-    def init_session(_server_pid, _socket, _args) do
+    def init_session(_socket, _args) do
       # a counter as the session state
       0
     end
@@ -31,33 +27,33 @@ defmodule ProtocolsTest do
     end
 
     @impl true
-    def handle_session_error(reason, info) do
-      IO.inspect([reason, info], label: "Client session failed")
+    def handle_session_error(_socket, _reason) do
+      # info = :inet.peername(socket)
+      # IO.puts("session failed: " <> inspect(reason))
       # called on decode errors, for logging, etc.
       :ok
     end
   end
 
   defmodule Client do
-    use Protocols.ReqResClient, transport: TelegramTransport
+    use Protocols.ReqResClient, telegrams: ExampleTelegrams.Telegram
   end
 
   test "request-response round trip" do
     alias ExampleTelegrams.Telegram1
     alias ExampleTelegrams.Telegram2
 
-    {:ok, pid} =
-      GenServer.start_link(Server, port: 0, max_sessions: 5, bind_address: {0, 0, 0, 0})
+    {:ok, pid} = Server.start_link({0, 0, 0, 0}, 0, nil)
 
-    port = GenServer.call(pid, :get_port)
+    port = Server.get_port(pid)
 
-    {:ok, conn} = TelegramTransport.connect({127, 0, 0, 1}, port, 100)
+    {:ok, conn} = Client.connect({127, 0, 0, 1}, port, 100)
 
-    assert Client.request!(conn, %Telegram1{message: "Fo"}, 100) ==
-             %Telegram2{counter: 0}
+    assert Client.request(conn, %Telegram1{message: "Fo"}, 100) ==
+             {:ok, %Telegram2{counter: 0}}
 
-    assert Client.request!(conn, %Telegram1{message: "Ba"}, 100) ==
-             %Telegram2{counter: 1}
+    assert Client.request(conn, %Telegram1{message: "Ba"}, 100) ==
+             {:ok, %Telegram2{counter: 1}}
   end
 
   test "bad client stops session but not server" do
@@ -65,13 +61,12 @@ defmodule ProtocolsTest do
     alias ExampleTelegrams.Telegram2
     alias ExampleTelegrams.InvalidTelegram
 
-    {:ok, pid} =
-      GenServer.start_link(Server, port: 0, max_sessions: 5, bind_address: {0, 0, 0, 0})
+    {:ok, pid} = Server.start_link({0, 0, 0, 0}, 0, nil)
 
-    port = GenServer.call(pid, :get_port)
+    port = Server.get_port(pid)
 
-    {:ok, conn1} = TelegramTransport.connect({127, 0, 0, 1}, port, 100)
-    {:ok, conn2} = TelegramTransport.connect({127, 0, 0, 1}, port, 100)
+    {:ok, conn1} = Client.connect({127, 0, 0, 1}, port, 100)
+    {:ok, conn2} = Client.connect({127, 0, 0, 1}, port, 100)
 
     # we can send an invalid telegram, but server will close connection because it cannot read it
     assert Client.request(conn1, %InvalidTelegram{}, 100) == {:error, {:recv_failed, :closed}}
@@ -81,19 +76,18 @@ defmodule ProtocolsTest do
              {:error, {:send_failed, :closed}}
 
     # second connection still works
-    assert Client.request!(conn2, %Telegram1{message: "Ba"}, 100) ==
-             %Telegram2{counter: 0}
+    assert Client.request(conn2, %Telegram1{message: "Ba"}, 100) ==
+             {:ok, %Telegram2{counter: 0}}
   end
 
   test "stopped server will closed connections" do
     alias ExampleTelegrams.Telegram1
 
-    {:ok, pid} =
-      GenServer.start_link(Server, port: 0, max_sessions: 5, bind_address: {0, 0, 0, 0})
+    {:ok, pid} = Server.start_link({0, 0, 0, 0}, 0, nil)
 
-    port = GenServer.call(pid, :get_port)
+    port = Server.get_port(pid)
 
-    {:ok, conn} = TelegramTransport.connect({127, 0, 0, 1}, port, 100)
+    {:ok, conn} = Client.connect({127, 0, 0, 1}, port, 100)
 
     :ok = GenServer.stop(pid, :normal)
 
