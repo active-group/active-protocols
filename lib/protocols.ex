@@ -10,11 +10,9 @@ defmodule Active.Protocols do
     """
     @type connection :: term
     @type data :: term
-    # :gen_tcp.timeout()
-    @type tmo :: term
 
     @callback send(connection, data) :: :ok | {:error, atom}
-    @callback recv(connection, tmo) :: {:ok, data} | {:error, atom}
+    @callback recv(connection, timeout()) :: {:ok, data} | {:error, atom}
     @callback close(connection) :: :ok
 
     defmacro __using__(_opts) do
@@ -75,7 +73,7 @@ defmodule Active.Protocols do
           recv_cont(conn, <<>>, @min_length, timeout)
         end
 
-        @spec connect(:gen_tcp.address(), :gen_tcp.port(), :gen_tcp.timeout()) ::
+        @spec connect(:inet.socket_address(), :inet.port_number(), timeout()) ::
                 {:ok, :gen_tcp.socket()} | {:error, :timeout} | {:error, :inet.posix()}
         def connect(addr, port, timeout),
           do: :gen_tcp.connect(addr, port, [active: false], timeout)
