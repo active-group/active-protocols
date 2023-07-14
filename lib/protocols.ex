@@ -138,6 +138,9 @@ defmodule Active.Protocols do
         def connect(addr, port, timeout) do
           ReqResClient.connect(addr, port, timeout)
         end
+
+        @spec close(socket) :: :ok
+        def close(socket), do: :gen_tcp.close(socket)
       end
     end
   end
