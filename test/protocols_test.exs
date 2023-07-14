@@ -43,7 +43,7 @@ defmodule ProtocolsTest do
     alias ExampleTelegrams.Telegram1
     alias ExampleTelegrams.Telegram2
 
-    {:ok, pid} = Server.start_link({0, 0, 0, 0}, 0, nil)
+    {:ok, pid} = Server.start_link({0, 0, 0, 0}, 0, :infinity, nil)
 
     port = Server.get_port(pid)
 
@@ -61,7 +61,7 @@ defmodule ProtocolsTest do
     alias ExampleTelegrams.Telegram2
     alias ExampleTelegrams.InvalidTelegram
 
-    {:ok, pid} = Server.start_link({0, 0, 0, 0}, 0, nil)
+    {:ok, pid} = Server.start_link({0, 0, 0, 0}, 0, :infinity, nil)
 
     port = Server.get_port(pid)
 
@@ -83,7 +83,7 @@ defmodule ProtocolsTest do
   test "stopped server will closed connections" do
     alias ExampleTelegrams.Telegram1
 
-    {:ok, pid} = Server.start_link({0, 0, 0, 0}, 0, nil)
+    {:ok, pid} = Server.start_link({0, 0, 0, 0}, 0, :infinity, nil)
 
     port = Server.get_port(pid)
 

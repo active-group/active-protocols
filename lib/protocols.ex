@@ -183,9 +183,12 @@ defmodule Active.Protocols do
         t_module = args[:transport_module]
         # rrs_module should be a ReqResServer
         rrs_module = args[:module]
-        port = args[:port]
-        bind_addr = args[:bind_address]
+        port = args[:port] || 0
+        bind_addr = args[:bind_address] || {0, 0, 0, 0}
         user_arg = args[:user_arg]
+        idle_session_timeout = args[:session_timeout] || :infinity
+
+        # TODO: check validity of args; esp. those that are only used later.
 
         case :gen_tcp.listen(port, active: false, ip: bind_addr) do
           {:error, reason} ->
@@ -199,7 +202,15 @@ defmodule Active.Protocols do
 
             {:ok, _pid} =
               Task.start_link(fn ->
-                accept_loop(server, session_supervisor, rrs_module, t_module, socket, user_arg)
+                accept_loop(
+                  server,
+                  session_supervisor,
+                  rrs_module,
+                  t_module,
+                  socket,
+                  idle_session_timeout,
+                  user_arg
+                )
               end)
 
             {:ok, %State{port: port}}
@@ -209,30 +220,51 @@ defmodule Active.Protocols do
       @impl GenServer
       def handle_call(:get_port, _from, state), do: {:reply, state.port, state}
 
-      defp accept_loop(server, session_supervisor, rrs_module, t_module, listen_socket, user_arg) do
+      defp accept_loop(
+             server,
+             session_supervisor,
+             rrs_module,
+             t_module,
+             listen_socket,
+             idle_session_timeout,
+             user_arg
+           ) do
         case :gen_tcp.accept(listen_socket) do
           {:ok, socket} ->
             # Note: we want to close connections (sessions) when the server stops, but not the other way round.
             {:ok, _pid} =
               Task.Supervisor.start_child(
                 session_supervisor,
-                fn -> run_session(socket, rrs_module, t_module, user_arg) end,
+                fn ->
+                  run_session(socket, rrs_module, t_module, idle_session_timeout, user_arg)
+                end,
                 restart: :temporary
               )
 
-            accept_loop(server, session_supervisor, rrs_module, t_module, listen_socket, user_arg)
+            accept_loop(
+              server,
+              session_supervisor,
+              rrs_module,
+              t_module,
+              listen_socket,
+              idle_session_timeout,
+              user_arg
+            )
 
           {:error, reason} ->
             Process.exit(self(), reason)
         end
       end
 
-      defp run_session(socket, rrs_module, t_module, user_arg) do
+      defp run_session(socket, rrs_module, t_module, idle_timeout, user_arg) do
         session = apply(rrs_module, :init_session, [socket, user_arg])
 
-        case serve_client(socket, session, rrs_module, t_module, user_arg) do
+        case serve_client(socket, session, rrs_module, t_module, idle_timeout, user_arg) do
           :ok ->
             nil
+
+          :timeout ->
+            :ok = :gen_tcp.close(socket)
 
           {:error, reason} ->
             apply(rrs_module, :handle_session_error, [socket, reason])
@@ -240,12 +272,15 @@ defmodule Active.Protocols do
         end
       end
 
-      defp serve_client(socket, session, rrs_module, t_module, user_arg) do
+      defp serve_client(socket, session, rrs_module, t_module, idle_timeout, user_arg) do
         # TODO: configurable timeout?
 
-        case apply(t_module, :recv, [socket, 10 * 1000]) do
+        case apply(t_module, :recv, [socket, idle_timeout]) do
           {:error, :closed} ->
             :ok
+
+          {:error, :timeout} ->
+            :timeout
 
           {:error, reason} ->
             {:error, {:receive_failed, reason}}
@@ -254,8 +289,11 @@ defmodule Active.Protocols do
             case apply(rrs_module, :handle_request, [request, session, user_arg]) do
               {:reply, response, session} ->
                 case apply(t_module, :send, [socket, response]) do
-                  :ok -> serve_client(socket, session, rrs_module, t_module, user_arg)
-                  {:error, reason} -> {:error, {:send_failed, reason}}
+                  :ok ->
+                    serve_client(socket, session, rrs_module, t_module, idle_timeout, user_arg)
+
+                  {:error, reason} ->
+                    {:error, {:send_failed, reason}}
                 end
             end
         end
@@ -271,13 +309,14 @@ defmodule Active.Protocols do
         end
 
         @doc "Starts the server listening on the given address and port. Port can be 0 to pick an arbitrary free port."
-        def start_link(bind_address, port, arg) do
+        def start_link(bind_address, port, session_timeout, arg) do
           GenServer.start_link(Server,
             bind_address: bind_address,
             port: port,
             module: __MODULE__,
             user_arg: arg,
-            transport_module: Transport
+            transport_module: Transport,
+            session_timeout: session_timeout
           )
         end
 
