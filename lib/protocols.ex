@@ -96,7 +96,7 @@ defmodule Active.Protocols do
     @type t_module :: module()
 
     @spec request(socket, t_module, telegram, timeout) ::
-            :ok | {:error, {:send_failed, term}} | {:error, {:recv_failed, term}}
+            {:ok, telegram} | {:error, {:send_failed, term}} | {:error, {:recv_failed, term}}
     def request(socket, module, telegram, response_timeout) do
       case SocketTransport.send(socket, module, telegram) do
         {:error, reason} ->
