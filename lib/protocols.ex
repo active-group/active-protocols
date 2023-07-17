@@ -128,7 +128,7 @@ defmodule Active.Protocols do
         @type telegram :: term()
 
         @spec request(socket, telegram, timeout) ::
-                :ok | {:error, {:send_failed, term}} | {:error, {:recv_failed, term}}
+                {:ok, telegram} | {:error, {:send_failed, term}} | {:error, {:recv_failed, term}}
         def request(socket, telegram, response_timeout) do
           ReqResClient.request(socket, TG, telegram, response_timeout)
         end
