@@ -193,8 +193,7 @@ defmodule Active.Protocols do
 
         # TODO: check validity of args; esp. those that are only used later.
 
-        # TODO: setting reuseaddr: true, reuseport: true gives badarg; but isn't that what prevents 'address already in use' errors?
-        case :gen_tcp.listen(port, active: false, ip: bind_addr) do
+        case :gen_tcp.listen(port, active: false, reuseaddr: true, ip: bind_addr) do
           {:error, reason} ->
             {:stop, {:listen_failed, reason}}
 
