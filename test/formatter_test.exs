@@ -25,10 +25,18 @@ defmodule FormatterTest do
 
   test "integer formatting" do
     assert invoke_full(non_neg_integer(3), [123]) == {:ok, "123"}
+    assert invoke_full(non_neg_integer(3), [1]) == {:ok, "001"}
+    assert invoke_full(non_neg_integer(min: 1, max: 3), [1]) == {:ok, "1"}
   end
 
   test "string formatting" do
     assert invoke_full(ascii_string([?0..?9], 3), ["123"]) == {:ok, "123"}
+
+    assert invoke_full(ascii_string([?0..?9], min: 1, max: 3), ["123"]) == {:ok, "123"}
+    assert invoke_full(ascii_string([?0..?9], min: 1, max: 3), ["1"]) == {:ok, "1"}
+
+    assert invoke_full(ascii_string([?0..?9], 3), ["1"]) ==
+             {:error, {:wrong_string_size, "1", 3, 3}}
   end
 
   test "choice" do

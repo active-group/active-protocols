@@ -125,7 +125,20 @@ defmodule Active.Formatter do
   defp non_neg_integer_0(v, min, max) do
     # TODO: check if v is integer, and in range, add padding (option if '0' or ' '? front or back?), etc.
     if is_integer(v) do
-      {:ok, Integer.to_string(v)}
+      cond do
+        v <= 0 ->
+          {:error, {:positive_integer_expected, v}}
+
+        true ->
+          s = Integer.to_string(v)
+          l = byte_size(s)
+
+          cond do
+            l <= min -> {:ok, String.pad_leading(s, min, "0")}
+            max == :infinity || l == max -> {:ok, s}
+            true -> {:error, {:integer_too_large, v}}
+          end
+      end
     else
       {:error, {:integer_expected, v}}
     end
@@ -151,10 +164,13 @@ defmodule Active.Formatter do
   end
 
   defp ascii_string_0(s, range, min, max) do
-    # TODO: need to convert to ascii?
+    # TODO: need to convert to ascii? erlang:iconv or Codepagex   (maybe ascii_string is the wrong word; any 8bit encoding is fine)
     # TODO: check it's in the range, not too long; pad with ' ' if too short? (option if front or back?)
     if is_binary(s) do
-      {:ok, s}
+      case byte_size(s) do
+        l when l >= min and (max == :infinity or l <= max) -> {:ok, s}
+        _ -> {:error, {:wrong_string_size, s, min, max}}
+      end
     else
       {:error, {:string_expected, s}}
     end
