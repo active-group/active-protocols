@@ -1,26 +1,13 @@
-defmodule Active.Telegrams do
-  defmodule T do
-    @callback decode(binary) :: {:ok, term} | {:need_more, integer} | {:error, atom}
+defmodule Active.Telegram do
+  @type telegram :: term
 
-    @callback encode(term) :: nonempty_binary()
+  @callback decode(nonempty_binary) :: {:ok, telegram, binary} | {:error, :eof} | {:error, term}
 
-    defmacro __using__(_opts) do
-      quote do
-        @behaviour T
-      end
-    end
-  end
+  @callback encode(telegram) :: {:ok, nonempty_binary} | {:error, term}
 
-  defmodule Modules do
-    defmacro __using__(_opts) do
-      quote do
-        use T
-
-        @impl T
-        def encode(value) do
-          apply(value.__struct__, :encode, [value])
-        end
-      end
+  defmacro __using__(_opts) do
+    quote do
+      @behaviour Active.Telegram
     end
   end
 end

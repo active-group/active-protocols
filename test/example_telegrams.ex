@@ -1,65 +1,51 @@
 defmodule ExampleTelegrams do
   defmodule Telegram1 do
-    use Active.Telegrams.T
+    use Active.Telegram
 
     defstruct [:message]
 
     def decode(bytes) do
       case bytes do
-        <<1, message::binary-size(2)>> -> {:ok, %Telegram1{message: message}}
-        <<1, _::binary-size(1)>> -> {:need_more, 1}
-        <<1>> -> {:need_more, 2}
-        <<>> -> {:need_more, 3}
+        <<1, message::binary-size(2), rest::binary>> -> {:ok, %Telegram1{message: message}, rest}
+        <<1, _::binary-size(1)>> -> {:error, :eof}
+        <<1>> -> {:error, :eof}
+        <<>> -> {:error, :eof}
         _ -> {:error, :decode_failed}
       end
     end
 
     def encode(v) do
-      <<1>> <> v.message
+      {:ok, <<1>> <> v.message}
     end
   end
 
   defmodule Telegram2 do
-    use Active.Telegrams.T
+    use Active.Telegram
 
     defstruct [:counter]
 
     def decode(bytes) do
       case bytes do
-        <<2, counter>> -> {:ok, %Telegram2{counter: counter}}
-        <<2>> -> {:need_more, 1}
-        <<>> -> {:need_more, 2}
+        <<2, counter, rest::binary>> -> {:ok, %Telegram2{counter: counter}, rest}
+        <<2>> -> {:error, :eof}
+        <<>> -> {:error, :eof}
         _ -> {:error, :decode_failed}
       end
     end
 
     def encode(v) do
-      <<2, v.counter>>
+      {:ok, <<2, v.counter>>}
     end
   end
 
   defmodule InvalidTelegram do
     # A telegram that can be send, but not be decoded.
-    use Active.Telegrams.T
+    use Active.Telegram
 
     defstruct []
 
     def decode(_bytes), do: {:error, :decode_failed}
 
-    def encode(_v), do: <<42>>
-  end
-
-  defmodule Telegram do
-    use Active.Telegrams.Modules
-
-    def decode(bytes) do
-      case bytes do
-        # determine min of all?
-        <<>> -> {:need_more, 1}
-        <<1, _::binary>> -> Telegram1.decode(bytes)
-        <<2, _::binary>> -> Telegram2.decode(bytes)
-        <<cmd, _::binary>> -> {:error, {:unknown_command, cmd}}
-      end
-    end
+    def encode(_v), do: {:ok, <<42>>}
   end
 end
