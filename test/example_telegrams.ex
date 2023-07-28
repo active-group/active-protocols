@@ -44,7 +44,7 @@ defmodule ExampleTelegrams do
 
     defstruct []
 
-    def decode(_bytes), do: {:error, :invalid_telegram}
+    def decode(bytes), do: {:error, {:invalid_telegram, bytes}}
 
     def encode(_v), do: {:ok, <<42>>}
   end
@@ -61,11 +61,8 @@ defmodule ExampleTelegrams do
           {:ok, result, rest} ->
             {:ok, result, rest}
 
-          _err ->
-            case InvalidTelegram.decode(bytes) do
-              {:ok, result, rest} -> {:ok, result, rest}
-              err -> err
-            end
+          err ->
+            err
         end
     end
   end

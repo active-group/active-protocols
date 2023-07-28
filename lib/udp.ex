@@ -42,7 +42,7 @@ defmodule TelegramUDPSocket do
         end
 
       {:error, err} ->
-        {:error, {:recv_failed, err}}
+        {:error, err}
     end
   end
 

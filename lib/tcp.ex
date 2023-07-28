@@ -16,8 +16,11 @@ defmodule Active.TelegramTCPSocket do
     case apply(tmodule, :encode, [telegram]) do
       {:ok, bytes} ->
         # TODO: check for errors?
-        :ok = :gen_tcp.send(ip_socket, bytes)
-        :ok
+        case :gen_tcp.send(ip_socket, bytes) do
+          # error: e.g. socket closed.
+          {:error, reason} -> {:error, reason}
+          :ok -> :ok
+        end
 
       {:error, err} ->
         {:error, err}
@@ -36,7 +39,7 @@ defmodule Active.TelegramTCPSocket do
         # Success; return telegram and take rest as new buffer.
         {{:ok, telegram}, %{state | buffer: rest}}
 
-      {:error, :eof} ->
+      :eof ->
         # Need more data
         case tcp_recv_bytes(ip_socket, 0, timeout) do
           {:ok, bytes} ->
@@ -46,7 +49,7 @@ defmodule Active.TelegramTCPSocket do
             {{:error, :timeout}, state}
 
           {:error, reason} ->
-            {{:error, {:recv_failed, reason}}, state}
+            {{:error, reason}, state}
         end
 
       {:error, reason} ->

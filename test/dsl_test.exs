@@ -8,7 +8,7 @@ defmodule Coding.DSLTest do
   test "defcoding" do
     test_v_in = [12]
     {:ok, bin, []} = test_enc(test_v_in)
-    {:ok, test_v_out, "", _ctx, _line, _column} = test_dec(bin)
+    {:ok, test_v_out, ""} = test_dec(bin)
     assert test_v_in == test_v_out
 
     assert :eof = test_dec("1")

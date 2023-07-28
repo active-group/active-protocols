@@ -1,5 +1,5 @@
 defmodule Active.Coding.DSL do
-  alias NimbleParsec, as: P
+  alias Active.Parser, as: P
 
   alias Active.Formatter, as: F
 
@@ -13,19 +13,19 @@ defmodule Active.Coding.DSL do
   @spec non_neg_integer(t(), int_or_min_max) :: t()
   def non_neg_integer(c \\ empty(), digits_or_min_max) do
     {f, p} = c
-    {F.non_neg_integer(f, digits_or_min_max), P.integer(p, digits_or_min_max)}
+    {F.non_neg_integer(f, digits_or_min_max), P.non_neg_integer(p, digits_or_min_max)}
   end
 
-  @spec ascii_string(t(), [char], int_or_min_max) :: t()
-  def ascii_string(c \\ empty(), range, count_or_min_max) do
+  @spec byte_string(t(), [char], int_or_min_max) :: t()
+  def byte_string(c \\ empty(), range, count_or_min_max) do
     {f, p} = c
-    {F.ascii_string(f, range, count_or_min_max), P.ascii_string(p, range, count_or_min_max)}
+    {F.byte_string(f, range, count_or_min_max), P.byte_string(p, range, count_or_min_max)}
   end
 
   @spec label(t(), term) :: t()
   def label(c \\ empty(), label) do
     {f, p} = c
-    {F.label(f, label), P.ascii_string(p, label)}
+    {F.label(f, label), P.byte_string(p, label)}
   end
 
   @spec tagged(t(), term) :: t()
@@ -38,7 +38,7 @@ defmodule Active.Coding.DSL do
   @spec const(t(), binary) :: t()
   def const(c \\ empty(), binary) do
     {f, p} = c
-    {F.const(f, binary), P.ignore(p, P.string(binary))}
+    {F.const(f, binary), P.const(p, binary)}
   end
 
   @spec concat(t(), t()) :: t()
@@ -55,13 +55,21 @@ defmodule Active.Coding.DSL do
     {F.optional(f, option_f), P.optional(p, option_p)}
   end
 
+  @spec choice(t(), [t()]) :: t()
+  def choice(c \\ empty(), choices) do
+    {f, p} = c
+    choices_f = Enum.map(choices, &elem(&1, 0))
+    choices_p = Enum.map(choices, &elem(&1, 1))
+    {F.choice(f, choices_f), P.choice(p, choices_p)}
+  end
+
   defmacro defcoding(encoder_name, decoder_name, spec) do
     quote do
-      require NimbleParsec
+      require Active.Parser
       require Active.Formatter
 
       F.defformatter(unquote(encoder_name), elem(unquote(spec), 0))
-      P.defparsec(unquote(decoder_name), elem(unquote(spec), 1))
+      P.defparser(unquote(decoder_name), elem(unquote(spec), 1))
     end
   end
 end
@@ -79,15 +87,17 @@ defmodule Active.Coding.Telegram do
       @impl true
       def decode(binary) do
         case __MODULE__.decode_(binary) do
-          {:ok, result, rest, _ctx, _line, _column} ->
+          {:ok, result, rest} ->
             case result do
               [] -> {:error, :empty_decoder_result}
               [res] -> {:ok, res, rest}
               more -> {:error, :multiple_decoder_results}
             end
 
+          :eof ->
+            :eof
+
           {:error, e} ->
-            # TODO: make sure :eof is returned.
             {:error, e}
         end
       end

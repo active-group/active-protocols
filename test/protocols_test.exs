@@ -35,13 +35,24 @@ defmodule ProtocolsTest do
 
   defmodule Client do
     def connect(host, port, _connect_timeout) do
-      {:ok, ip_socket} = :gen_tcp.connect(host, port, active: false)
+      {:ok, ip_socket} = :gen_tcp.connect(host, port, active: false, mode: :binary)
       {:ok, Active.TelegramTCPSocket.socket(ip_socket, ExampleTelegrams)}
     end
 
     def request(socket, telegram, timeout) do
-      :ok = Active.TelegramTCPSocket.send(socket, telegram)
-      Active.TelegramTCPSocket.recv(socket, timeout)
+      case Active.TelegramTCPSocket.send(socket, telegram) do
+        {:error, :closed} ->
+          {:error, {:send_failed, :closed}}
+
+        {:error, reason} ->
+          {:error, {:send_failed, reason}}
+
+        :ok ->
+          case Active.TelegramTCPSocket.recv(socket, timeout) do
+            {:error, reason} -> {:error, {:recv_failed, reason}}
+            {:ok, response} -> {:ok, response}
+          end
+      end
     end
   end
 
@@ -86,7 +97,7 @@ defmodule ProtocolsTest do
 
   # TODO: test making requests in chunks.
 
-  test "stopped server will closed connections" do
+  test "stopped server will close connections" do
     alias ExampleTelegrams.Telegram1
 
     {:ok, pid} = Server.start_listener(:test_server2, {0, 0, 0, 0}, 0, :infinity, nil)
@@ -96,7 +107,6 @@ defmodule ProtocolsTest do
 
     :ok = GenServer.stop(pid, :normal)
 
-    # Note that recv fails, not the send (I think that's normal for TCP)
     assert Client.request(conn, %Telegram1{message: "Ba"}, 100) ==
              {:error, {:recv_failed, :closed}}
   end

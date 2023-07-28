@@ -123,6 +123,7 @@ defmodule Active.Formatter do
   end
 
   defp non_neg_integer_0(v, min, max) do
+    # TODO: map over byte_string?
     # TODO: check if v is integer, and in range, add padding (option if '0' or ' '? front or back?), etc.
     if is_integer(v) do
       cond do
@@ -163,9 +164,8 @@ defmodule Active.Formatter do
     fmap1(fmt, {&non_neg_integer_0/3, [min, max]})
   end
 
-  defp ascii_string_0(s, range, min, max) do
-    # TODO: need to convert to ascii? erlang:iconv or Codepagex   (maybe ascii_string is the wrong word; any 8bit encoding is fine)
-    # TODO: check it's in the range, not too long; pad with ' ' if too short? (option if front or back?)
+  defp byte_string_0(s, range, min, max) do
+    # TODO: check if all bytes are in the range, maybe pad with ' ' if too short? (option if front or back?)
     if is_binary(s) do
       case byte_size(s) do
         l when l >= min and (max == :infinity or l <= max) -> {:ok, s}
@@ -176,24 +176,25 @@ defmodule Active.Formatter do
     end
   end
 
-  # def ascii_char(ranges), do: nil
-  @spec ascii_string(
+  # TODO: add string()? using erlang:iconv or Codepagex?
+
+  @spec byte_string(
           t(),
           [char],
           pos_integer() | [{:min, non_neg_integer()} | {:max, pos_integer()}]
         ) :: t()
-  def ascii_string(fmt \\ empty(), range, count_or_min_max)
+  def byte_string(fmt \\ empty(), range, count_or_min_max)
 
-  def ascii_string(fmt, range, count_or_min_max) when is_integer(count_or_min_max) do
-    ascii_string(fmt, min: count_or_min_max, max: count_or_min_max)
+  def byte_string(fmt, range, count_or_min_max) when is_integer(count_or_min_max) do
+    byte_string(fmt, min: count_or_min_max, max: count_or_min_max)
   end
 
-  def ascii_string(fmt, range, min: min) do
-    ascii_string(fmt, range, min: min, max: :infinity)
+  def byte_string(fmt, range, min: min) do
+    byte_string(fmt, range, min: min, max: :infinity)
   end
 
-  def ascii_string(fmt, range, min: min, max: max) do
-    fmap1(fmt, {&ascii_string_0/4, [range, min, max]})
+  def byte_string(fmt, range, min: min, max: max) do
+    fmap1(fmt, {&byte_string_0/4, [range, min, max]})
   end
 
   @doc """
@@ -279,7 +280,7 @@ defmodule Active.Formatter do
   @doc """
   Defines a formatter with the given name and the given
   format. A formatter is a function that takes a list of values and returns `{:ok,
-  binary}` or an error. Not that the format must consume the full input.
+  binary, rest_input}` or an error.
   """
   defmacro defformatter(name, fmt) do
     quote do

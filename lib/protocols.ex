@@ -26,8 +26,8 @@ defmodule Active.Protocols do
         @spec start_listener(atom, :inet.socket_address(), :inet.port_number(), timeout, term) ::
                 {:ok, pid} | {:error, term}
         def start_listener(name, bind_address, port, idle_session_timeout, init_arg) do
-          # Note: reuseaddr is not documented; maybe it doesn't work?
-          # TODO: needed?, reuseaddr: true
+          # Note: By default the socket will be set to return binary data, with the options {active, false}, {packet, raw}, {reuseaddr, true} set
+
           transport_opts = [ip: bind_address, port: port]
 
           protocol_opts = [
