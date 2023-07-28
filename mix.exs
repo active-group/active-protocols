@@ -27,7 +27,8 @@ defmodule Protocols.MixProject do
     [
       {:dialyxir, "~> 1.3", only: [:dev], runtime: false},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false},
-      {:nimble_parsec, "~> 1.3"}
+      {:nimble_parsec, "~> 1.3"},
+      {:ranch, "~> 2.1"}
     ]
   end
 end

@@ -1,22 +1,22 @@
 defmodule ProtocolsTest do
   use ExUnit.Case
-  import ExampleTelegrams
 
   alias Active.Protocols
 
   doctest Protocols
 
   defmodule Server do
-    use Protocols.ReqResServer, telegrams: ExampleTelegrams.Telegram
+    use Protocols.TCPServerRequestResponse, telegrams: ExampleTelegrams
 
     @impl true
     def init_session(_socket, _args) do
+      # info = :inet.peername(socket)
       # a counter as the session state
       0
     end
 
     @impl true
-    def handle_request(request, session, _args) do
+    def handle_request(session, request) do
       alias ExampleTelegrams.Telegram1
       alias ExampleTelegrams.Telegram2
 
@@ -27,25 +27,31 @@ defmodule ProtocolsTest do
     end
 
     @impl true
-    def handle_session_error(_socket, _reason) do
-      # info = :inet.peername(socket)
-      # IO.puts("session failed: " <> inspect(reason))
-      # called on decode errors, for logging, etc.
-      :ok
+    def handle_error(_session, _reason) do
+      # called on decode and receive errors, for logging, etc.
+      :close
     end
   end
 
   defmodule Client do
-    use Protocols.ReqResClient, telegrams: ExampleTelegrams.Telegram
+    def connect(host, port, _connect_timeout) do
+      {:ok, ip_socket} = :gen_tcp.connect(host, port, active: false)
+      {:ok, Active.TelegramTCPSocket.socket(ip_socket, ExampleTelegrams)}
+    end
+
+    def request(socket, telegram, timeout) do
+      :ok = Active.TelegramTCPSocket.send(socket, telegram)
+      Active.TelegramTCPSocket.recv(socket, timeout)
+    end
   end
+
+  {:ok, _pid} = Server.start_listener(:test_server, {0, 0, 0, 0}, 0, :infinity, nil)
 
   test "request-response round trip" do
     alias ExampleTelegrams.Telegram1
     alias ExampleTelegrams.Telegram2
 
-    {:ok, pid} = Server.start_link({0, 0, 0, 0}, 0, :infinity, nil)
-
-    port = Server.get_port(pid)
+    port = Server.get_port(:test_server)
 
     {:ok, conn} = Client.connect({127, 0, 0, 1}, port, 100)
 
@@ -61,9 +67,7 @@ defmodule ProtocolsTest do
     alias ExampleTelegrams.Telegram2
     alias ExampleTelegrams.InvalidTelegram
 
-    {:ok, pid} = Server.start_link({0, 0, 0, 0}, 0, :infinity, nil)
-
-    port = Server.get_port(pid)
+    port = Server.get_port(:test_server)
 
     {:ok, conn1} = Client.connect({127, 0, 0, 1}, port, 100)
     {:ok, conn2} = Client.connect({127, 0, 0, 1}, port, 100)
@@ -80,12 +84,13 @@ defmodule ProtocolsTest do
              {:ok, %Telegram2{counter: 0}}
   end
 
+  # TODO: test making requests in chunks.
+
   test "stopped server will closed connections" do
     alias ExampleTelegrams.Telegram1
 
-    {:ok, pid} = Server.start_link({0, 0, 0, 0}, 0, :infinity, nil)
-
-    port = Server.get_port(pid)
+    {:ok, pid} = Server.start_listener(:test_server2, {0, 0, 0, 0}, 0, :infinity, nil)
+    port = Server.get_port(:test_server2)
 
     {:ok, conn} = Client.connect({127, 0, 0, 1}, port, 100)
 
