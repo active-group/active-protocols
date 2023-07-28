@@ -28,14 +28,14 @@ defmodule Active.Coding.DSL do
     {F.label(f, label), P.ascii_string(p, label)}
   end
 
-  @spec label(t(), term) :: t()
+  @spec tagged(t(), term) :: t()
   def tagged(c \\ empty(), to_tag, tag) do
     {f, p} = c
     {to_tag_f, to_tag_p} = to_tag
     {F.untag(f, to_tag_f, tag), P.tag(p, to_tag_p, tag)}
   end
 
-  @spec label(t(), binary) :: t()
+  @spec const(t(), binary) :: t()
   def const(c \\ empty(), binary) do
     {f, p} = c
     {F.const(f, binary), P.ignore(p, P.string(binary))}
@@ -48,7 +48,7 @@ defmodule Active.Coding.DSL do
     {F.concat(left_f, right_f), P.concat(left_p, right_p)}
   end
 
-  @spec concat(t(), t()) :: t()
+  @spec optional(t(), t()) :: t()
   def optional(c \\ empty(), option) do
     {f, p} = c
     {option_f, option_p} = option
@@ -87,7 +87,7 @@ defmodule Active.Coding.Telegram do
             end
 
           {:error, e} ->
-            # TODO: make sure {:error, :eof} is returned.
+            # TODO: make sure :eof is returned.
             {:error, e}
         end
       end

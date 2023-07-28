@@ -71,7 +71,7 @@ defmodule Active.Formatter do
   defp fmap1_0(prev, rest, f, args) do
     case rest do
       [] ->
-        {:error, :eof}
+        {:error, :insufficient_input}
 
       [v | rest] ->
         case apply(f, [v] ++ args) do
