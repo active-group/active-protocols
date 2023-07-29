@@ -2,16 +2,25 @@ defmodule Active.Parser do
   # Parser is private
   @doc false
   defmodule Parser do
-    defstruct [:f]
+    defstruct [:f, :args]
   end
 
   @opaque t() :: %Parser{}
 
-  defp prim(f), do: %Parser{f: f}
+  defp prim(f, args), do: %Parser{f: f, args: args}
+  defp prim(f), do: prim(f, [])
+
+  defmacro is_parser(v) do
+    quote do
+      is_struct(unquote(v), Parser)
+    end
+  end
 
   @doc false
   # only for macro and tests.
-  def invoke(p, bytes), do: apply(p.f, [bytes])
+  def invoke(p, bytes) when is_parser(p) and is_binary(bytes) do
+    apply(p.f, [bytes] ++ p.args)
+  end
 
   defp fmap(to_map, {f, args}) do
     # calls f.(return, ..args)
@@ -45,7 +54,7 @@ defmodule Active.Parser do
     return([])
   end
 
-  def concat(left, right) do
+  def concat(left, right) when is_parser(left) and is_parser(right) do
     fmap(
       left,
       {fn result ->
@@ -74,8 +83,8 @@ defmodule Active.Parser do
       err ->
         case cr do
           [] -> err
-          [c1 | cr] -> choice_00(bytes, c1, cr)
           [c] -> invoke(c, bytes)
+          [c1 | cr] -> choice_00(bytes, c1, cr)
         end
     end
   end
@@ -207,12 +216,23 @@ defmodule Active.Parser do
         {fn [s], rest ->
            case Integer.parse(s) do
              {i, ""} -> {:ok, [i], rest}
-             {i, _} -> {:error, {:expected_int, s}}
+             {_i, _r} -> {:error, {:expected_int, s}}
              :error -> {:error, {:expected_int, s}}
            end
          end, []}
       )
     )
+  end
+
+  def structure_0(output, rest, struct, fields) do
+    {:ok, Kernel.struct!(struct, Enum.zip(fields, output)), rest}
+  end
+
+  defp concat_rev(right, left), do: concat(left, right)
+
+  def structure(p \\ empty(), struct, fields_parsers) do
+    {fields, parsers} = Enum.unzip(fields_parsers)
+    concat(p, map(Enum.reduce(parsers, &concat_rev/2), {&structure_0/4, [struct, fields]}))
   end
 
   @doc """

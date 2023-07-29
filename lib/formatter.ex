@@ -2,7 +2,7 @@ defmodule Active.Formatter do
   # Fmt is private
   @doc false
   defmodule Fmt do
-    defstruct [:f]
+    defstruct [:f, :args]
   end
 
   @opaque t() :: %Fmt{}
@@ -16,34 +16,40 @@ defmodule Active.Formatter do
   # only for macro and tests.
   @doc false
   def invoke(fmt, input) do
-    apply(fmt.f, [input])
+    apply(fmt.f, [input] ++ fmt.args)
   end
 
   @spec prim(([term] -> {:ok, binary, [term]} | {:error, term})) :: t()
+  defp prim(f, args) do
+    %Fmt{f: f, args: args}
+  end
+
   defp prim(f) do
-    %Fmt{f: f}
+    prim(f, [])
   end
 
   ############################################################
 
-  def map(fmt, {f, args}) do
-    fn lst ->
-      case invoke(fmt, lst) do
-        {:ok, b, rest} -> {:ok, apply(f, [b] ++ args), rest}
-        err -> err
-      end
+  defp map_0(lst, fmt, {f, args}) do
+    case invoke(fmt, lst) do
+      {:ok, b, rest} -> {:ok, apply(f, [b] ++ args), rest}
+      err -> err
     end
-    |> prim
+  end
+
+  def map(fmt, {f, args}) do
+    prim(&map_0/3, [fmt, {f, args}])
+  end
+
+  defp fmap_0(lst, fmt, {f, args}) do
+    case invoke(fmt, lst) do
+      {:ok, b, rest} -> apply(f, [b, rest] ++ args)
+      err -> err
+    end
   end
 
   def fmap(fmt, {f, args}) do
-    fn lst ->
-      case invoke(fmt, lst) do
-        {:ok, b, rest} -> apply(f, [b, rest] ++ args)
-        err -> err
-      end
-    end
-    |> prim
+    prim(&fmap_0/3, [fmt, {f, args}])
   end
 
   defp return(v) do
@@ -123,7 +129,7 @@ defmodule Active.Formatter do
   end
 
   defp non_neg_integer_0(v, min, max) do
-    # TODO: map over byte_string?
+    # TODO: just map over byte_string?
     # TODO: check if v is integer, and in range, add padding (option if '0' or ' '? front or back?), etc.
     if is_integer(v) do
       cond do
@@ -137,7 +143,7 @@ defmodule Active.Formatter do
           cond do
             l <= min -> {:ok, String.pad_leading(s, min, "0")}
             max == :infinity || l == max -> {:ok, s}
-            true -> {:error, {:integer_too_large, v}}
+            true -> {:error, {:integer_too_large, [min: min, max: max], v}}
           end
       end
     else
@@ -276,6 +282,15 @@ defmodule Active.Formatter do
   #       to_unwrap.(lst)
   #   end
   # end
+
+  defp unstruct_0(result, on_list, fields) do
+    invoke(on_list, Enum.map(fields, fn f -> Map.get(result, f) end))
+  end
+
+  @spec unstruct(t, t, [atom]) :: t
+  def unstruct(fmt \\ empty(), on_list, fields) do
+    fmap1(fmt, {&unstruct_0/3, [on_list, fields]})
+  end
 
   @doc """
   Defines a formatter with the given name and the given

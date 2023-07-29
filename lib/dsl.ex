@@ -58,11 +58,21 @@ defmodule Active.Coding.DSL do
   @spec choice(t(), [t()]) :: t()
   def choice(c \\ empty(), choices) do
     {f, p} = c
-    choices_f = Enum.map(choices, &elem(&1, 0))
-    choices_p = Enum.map(choices, &elem(&1, 1))
+    {choices_f, choices_p} = Enum.unzip(choices)
     {F.choice(f, choices_f), P.choice(p, choices_p)}
   end
 
+  @spec structure(t, atom, %{atom => t}) :: t
+  def structure(c \\ empty(), struct, fields_codings) do
+    {f, p} = c
+    {fields, codings} = Enum.unzip(fields_codings)
+    {fs, ps} = Enum.unzip(codings)
+
+    {F.unstruct(f, Enum.reduce(Enum.reverse(fs), &F.concat/2), fields),
+     P.structure(p, struct, Enum.zip(fields, ps))}
+  end
+
+  # TODO: straighten out of we take/output lists or not
   defmacro defcoding(encoder_name, decoder_name, spec) do
     quote do
       require Active.Parser
