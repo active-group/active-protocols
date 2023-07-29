@@ -68,11 +68,9 @@ defmodule Active.Coding.DSL do
     {fields, codings} = Enum.unzip(fields_codings)
     {fs, ps} = Enum.unzip(codings)
 
-    {F.unstruct(f, Enum.reduce(Enum.reverse(fs), &F.concat/2), fields),
-     P.structure(p, struct, Enum.zip(fields, ps))}
+    {F.unstruct(f, Enum.zip(fields, fs)), P.structure(p, struct, Enum.zip(fields, ps))}
   end
 
-  # TODO: straighten out of we take/output lists or not
   defmacro defcoding(encoder_name, decoder_name, spec) do
     quote do
       require Active.Parser
@@ -98,11 +96,7 @@ defmodule Active.Coding.Telegram do
       def decode(binary) do
         case __MODULE__.decode_(binary) do
           {:ok, result, rest} ->
-            case result do
-              [] -> {:error, :empty_decoder_result}
-              [res] -> {:ok, res, rest}
-              more -> {:error, :multiple_decoder_results}
-            end
+            {:ok, result, rest}
 
           :eof ->
             :eof
@@ -114,12 +108,9 @@ defmodule Active.Coding.Telegram do
 
       @impl true
       def encode(term) do
-        case __MODULE__.encode_([term]) do
-          {:ok, result, rest} ->
-            case rest do
-              [] -> {:ok, result}
-              _ -> {:error, {:incomplete_encoding, rest}}
-            end
+        case __MODULE__.encode_(term) do
+          {:ok, result} ->
+            {:ok, result}
 
           {:error, e} ->
             {:error, e}

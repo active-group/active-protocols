@@ -16,24 +16,24 @@ defmodule ParserTest do
       defparser(:test1, non_neg_integer(2))
     end
 
-    assert Test.test1("42") == {:ok, [42], ""}
+    assert Test.test1("42") == {:ok, 42, ""}
   end
 
   def invalid_example(), do: {non_neg_integer(3), "foo"}
-  def good_example_1(), do: {non_neg_integer(3), "123", [123]}
-  def good_example_2(), do: {byte_string([?a..?z], 3), "abc", ["abc"]}
+  def good_example_1(), do: {non_neg_integer(3), "123", 123}
+  def good_example_2(), do: {byte_string([?a..?z], 3), "abc", "abc"}
 
   test "integer parsing" do
-    assert invoke_full(non_neg_integer(3), "123") == {:ok, [123]}
-    assert invoke_full(non_neg_integer(3), "001") == {:ok, [1]}
-    assert invoke_full(non_neg_integer(min: 1, max: 3), "1") == {:ok, [1]}
+    assert invoke_full(non_neg_integer(3), "123") == {:ok, 123}
+    assert invoke_full(non_neg_integer(3), "001") == {:ok, 1}
+    assert invoke_full(non_neg_integer(min: 1, max: 3), "1") == {:ok, 1}
   end
 
   test "string parsing" do
-    assert invoke_full(byte_string([?0..?9], 3), "123") == {:ok, ["123"]}
+    assert invoke_full(byte_string([?0..?9], 3), "123") == {:ok, "123"}
 
-    assert invoke_full(byte_string([?0..?9], min: 1, max: 3), "123") == {:ok, ["123"]}
-    assert invoke_full(byte_string([?0..?9], min: 1, max: 3), "1") == {:ok, ["1"]}
+    assert invoke_full(byte_string([?0..?9], min: 1, max: 3), "123") == {:ok, "123"}
+    assert invoke_full(byte_string([?0..?9], min: 1, max: 3), "1") == {:ok, "1"}
 
     assert invoke_full(byte_string([?0..?9], 3), "1") == :eof
   end
@@ -47,11 +47,18 @@ defmodule ParserTest do
     assert invoke_full(p, v2) == {:ok, r2}
   end
 
+  test "wrap" do
+    {p1, v1, r1} = good_example_1()
+    {p2, v2, r2} = good_example_2()
+    assert invoke_full(wrap(p1), v1) == {:ok, [r1]}
+    assert invoke_full(wrap(p2), v2) == {:ok, [r2]}
+  end
+
   test "concat" do
     {p1, v1, r1} = good_example_1()
     {p2, v2, r2} = good_example_2()
 
-    assert invoke_full(concat(p1, p2), v1 <> v2) == {:ok, r1 ++ r2}
+    assert invoke_full(concat(wrap(p1), wrap(p2)), v1 <> v2) == {:ok, [r1, r2]}
   end
 
   test "label" do
@@ -61,11 +68,21 @@ defmodule ParserTest do
   end
 
   test "const" do
-    assert invoke_full(const("A"), "A") == {:ok, []}
+    assert invoke_full(wrap(const("A")), "A") == {:ok, []}
   end
 
   test "tag" do
     {p1, v1, r1} = good_example_1()
-    assert invoke_full(p1 |> tag(:foo), v1) == {:ok, [{:foo, r1}]}
+    assert invoke_full(p1 |> tag(:foo), v1) == {:ok, {:foo, r1}}
+  end
+
+  defmodule T do
+    defstruct [:a, :b]
+  end
+
+  test "struct" do
+    {p1, v1, r1} = good_example_1()
+    {p2, v2, r2} = good_example_2()
+    assert invoke_full(structure(T, a: p1, b: p2), v1 <> v2) == {:ok, %T{a: r1, b: r2}}
   end
 end

@@ -6,8 +6,8 @@ defmodule Coding.DSLTest do
   defcoding(:test_enc, :test_dec, non_neg_integer(2))
 
   test "defcoding" do
-    test_v_in = [12]
-    {:ok, bin, []} = test_enc(test_v_in)
+    test_v_in = 12
+    {:ok, bin} = test_enc(test_v_in)
     {:ok, test_v_out, ""} = test_dec(bin)
     assert test_v_in == test_v_out
 
@@ -18,13 +18,13 @@ defmodule Coding.DSLTest do
     defstruct [:a, :b]
   end
 
-  defcoding(:t_enc, :t_dec, structure(empty(), T, a: non_neg_integer(2), b: non_neg_integer(3)))
+  defcoding(:t_enc, :t_dec, structure(T, a: non_neg_integer(2), b: non_neg_integer(3)))
 
   test "struct" do
     s = %T{a: 12, b: 345}
     b = "12345"
-    assert t_enc([s]) == {:ok, b, []}
-    assert t_dec(b) == {:ok, s, ""}
+    assert t_enc(s) == {:ok, b}
+    assert t_dec(b) == {:ok, s, <<>>}
   end
 
   defmodule TestTelegram do
@@ -33,6 +33,6 @@ defmodule Coding.DSLTest do
 
   test "as telegram" do
     {:ok, binary} = TestTelegram.encode(12)
-    {:ok, 12, ""} = TestTelegram.decode(binary)
+    {:ok, 12, <<>>} = TestTelegram.decode(binary)
   end
 end
