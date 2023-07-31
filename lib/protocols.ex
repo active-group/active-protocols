@@ -80,7 +80,11 @@ defmodule Active.Protocols do
 
     then
 
-    start_listener(name, address, port, idle_timeout, use_arg)
+    {:ok, pid} = start_listener(name, address, port, idle_timeout, use_arg)
+
+    stop_listener(name)
+
+    get_port(name)
 
     use_arg is passed to init_session.
     """

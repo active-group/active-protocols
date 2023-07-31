@@ -339,8 +339,15 @@ defmodule Active.Formatter do
 
   defp unstruct_0(input, fields_formats) do
     {fields, formats} = Enum.unzip(fields_formats)
-    values = Enum.map(fields, fn f -> Map.get(input, f) end)
-    invoke(list(formats), values)
+
+    case Enum.reduce(fields, true, fn f, acc -> acc && Map.has_key?(input, f) end) do
+      true ->
+        values = Enum.map(fields, fn f -> Map.get(input, f) end)
+        invoke(list(formats), values)
+
+      false ->
+        {:error, {:struct_fields_missing, fields, input}}
+    end
   end
 
   @spec unstruct(%{atom => t}) :: t
