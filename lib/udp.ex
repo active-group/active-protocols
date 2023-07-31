@@ -64,7 +64,7 @@ defmodule Active.TelegramUDPSocket do
   end
 
   @spec recv(t(), timeout()) ::
-          {:ok, :inet.socket_address(), :inet.port_number(), term} | {:error, term}
+          {:ok, {:inet.socket_address(), :inet.port_number(), term}} | {:error, term}
   def recv(socket, timeout) do
     # Note: update has a default timeout of 5 seconds. Failing the process if reached. Set to :infinity?
     # Note: this fails when the timeout is reached

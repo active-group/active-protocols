@@ -19,7 +19,7 @@ defmodule Active.Formatter do
     apply(fmt.f, [input] ++ fmt.args)
   end
 
-  @spec prim((term -> {:ok, binary} | {:error, term}), [term]) :: t()
+  # @spec prim((term -> {:ok, binary} | {:error, term}), [term]) :: t()
   defp prim(f, args) do
     %Fmt{f: f, args: args}
   end
@@ -350,7 +350,7 @@ defmodule Active.Formatter do
     end
   end
 
-  @spec unstruct(%{atom => t}) :: t
+  @spec unstruct([{atom, t()}]) :: t
   def unstruct(fields_formats) do
     prim(&unstruct_0/2, [fields_formats])
   end
