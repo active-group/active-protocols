@@ -3,7 +3,8 @@ defmodule Active.Coding do
 
   alias Active.Formatter, as: F
 
-  @opaque t() :: {F.t(), P.t()}
+  # Note: wanted to make it 'opaque', but dializer complains on user side then.
+  @type t() :: {F.t(), P.t()}
 
   @type int_or_min_max :: pos_integer | [{:min, pos_integer} | {:max, pos_integer | :infinity}]
 
