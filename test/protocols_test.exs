@@ -34,26 +34,7 @@ defmodule ProtocolsTest do
   end
 
   defmodule Client do
-    def connect(host, port, _connect_timeout) do
-      {:ok, ip_socket} = :gen_tcp.connect(host, port, active: false, mode: :binary)
-      {:ok, Active.TelegramTCPSocket.socket(ip_socket, ExampleTelegrams)}
-    end
-
-    def request(socket, telegram, timeout) do
-      case Active.TelegramTCPSocket.send(socket, telegram) do
-        {:error, :closed} ->
-          {:error, {:send_failed, :closed}}
-
-        {:error, reason} ->
-          {:error, {:send_failed, reason}}
-
-        :ok ->
-          case Active.TelegramTCPSocket.recv(socket, timeout) do
-            {:error, reason} -> {:error, {:recv_failed, reason}}
-            {:ok, response} -> {:ok, response}
-          end
-      end
-    end
+    use Active.Protocols.TCPClientRequestResponse, telegrams: ExampleTelegrams
   end
 
   {:ok, _pid} = Server.start_listener(:test_server, {0, 0, 0, 0}, 0, :infinity, nil)

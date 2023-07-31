@@ -59,7 +59,7 @@ defmodule Active.Coding do
     {F.choice(choices_f), P.choice(choices_p)}
   end
 
-  @spec structure(atom, %{atom => t}) :: t
+  @spec structure(atom, [{atom, t}]) :: t
   def structure(struct, fields_codings) do
     {fields, codings} = Enum.unzip(fields_codings)
     {fs, ps} = Enum.unzip(codings)

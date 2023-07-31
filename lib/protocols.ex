@@ -75,6 +75,16 @@ defmodule Active.Protocols do
   end
 
   defmodule TCPServerRequestResponse do
+    @moduledoc """
+    use TCPServerRequestResponse, ...
+
+    then
+
+    start_listener(name, address, port, idle_timeout, use_arg)
+
+    use_arg is passed to init_session.
+    """
+
     @type telegram :: term
 
     @type session :: term
@@ -141,6 +151,51 @@ defmodule Active.Protocols do
             {:fail, reason} ->
               Active.TelegramTCPSocket.close(socket)
               Process.exit(self(), reason)
+          end
+      end
+    end
+  end
+
+  defmodule TCPClientRequestResponse do
+    defmacro __using__(opts) do
+      quote do
+        def telegrams, do: unquote(opts[:telegrams])
+
+        def connect(host, port, connect_timeout) do
+          case :gen_tcp.connect(host, port, [active: false, mode: :binary], connect_timeout) do
+            {:ok, ip_socket} ->
+              {:ok, Active.TelegramTCPSocket.socket(ip_socket, telegrams())}
+
+            {:error, reason} ->
+              {:error, reason}
+          end
+        end
+
+        def close(socket), do: Active.Protocols.TCPClientRequestResponse.do_close(socket)
+
+        def request(socket, telegram, timeout),
+          do: Active.Protocols.TCPClientRequestResponse.do_request(socket, telegram, timeout)
+      end
+    end
+
+    @doc false
+    def do_close(socket) do
+      Active.TelegramTCPSocket.close(socket)
+    end
+
+    @doc false
+    def do_request(socket, telegram, timeout) do
+      case Active.TelegramTCPSocket.send(socket, telegram) do
+        {:error, :closed} ->
+          {:error, {:send_failed, :closed}}
+
+        {:error, reason} ->
+          {:error, {:send_failed, reason}}
+
+        :ok ->
+          case Active.TelegramTCPSocket.recv(socket, timeout) do
+            {:error, reason} -> {:error, {:recv_failed, reason}}
+            {:ok, response} -> {:ok, response}
           end
       end
     end
