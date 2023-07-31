@@ -68,17 +68,29 @@ defmodule Active.Coding do
   end
 
   @doc false
+  # only for macro
+  def formatter(coding) do
+    {f, _} = coding
+    f
+  end
+
+  @doc false
+  # only for macro
+  def parser(coding) do
+    {_, p} = coding
+    p
+  end
+
+  @doc false
   # only for tests.
   def encode(coding, value) do
-    {f, _} = coding
-    F.invoke(f, value)
+    F.invoke(formatter(coding), value)
   end
 
   @doc false
   # only for tests.
   def decode(coding, binary) do
-    {_, p} = coding
-    P.invoke(p, binary)
+    P.invoke(parser(coding), binary)
   end
 
   defmacro defcoding(encoder_name, decoder_name, spec) do
@@ -86,8 +98,8 @@ defmodule Active.Coding do
       require Active.Parser
       require Active.Formatter
 
-      F.defformatter(unquote(encoder_name), elem(unquote(spec), 0))
-      P.defparser(unquote(decoder_name), elem(unquote(spec), 1))
+      F.defformatter(unquote(encoder_name), Active.Coding.formatter(unquote(spec)))
+      P.defparser(unquote(decoder_name), Active.Coding.parser(unquote(spec)))
     end
   end
 end
