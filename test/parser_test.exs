@@ -54,11 +54,11 @@ defmodule ParserTest do
     assert invoke_full(wrap(p2), v2) == {:ok, [r2]}
   end
 
-  test "concat" do
+  test "list" do
     {p1, v1, r1} = good_example_1()
     {p2, v2, r2} = good_example_2()
 
-    assert invoke_full(concat(wrap(p1), wrap(p2)), v1 <> v2) == {:ok, [r1, r2]}
+    assert invoke_full(list([p1, p2]), v1 <> v2) == {:ok, [r1, r2]}
   end
 
   test "label" do
@@ -68,7 +68,9 @@ defmodule ParserTest do
   end
 
   test "const" do
-    assert invoke_full(wrap(const("A")), "A") == {:ok, []}
+    {p1, v1, r1} = good_example_1()
+    assert invoke_full(prepend_const(p1, "A"), "A" <> v1) == {:ok, r1}
+    assert invoke_full(append_const(p1, "A"), v1 <> "A") == {:ok, r1}
   end
 
   test "tag" do

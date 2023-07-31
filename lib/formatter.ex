@@ -26,80 +26,99 @@ defmodule Active.Formatter do
 
   ############################################################
 
-  # TODO: need comap, cofmap instead of all the prims.
-
-  defp map_0(input, fmt, {f, args}) do
-    case invoke(fmt, input) do
-      {:ok, b} -> {:ok, apply(f, [b] ++ args)}
-      err -> err
-    end
+  defp fmap_0(input, fmt, f, args) do
+    b = invoke(fmt, input)
+    apply(f, [b] ++ args)
   end
 
-  def map(fmt, {f, args}) do
-    prim(&map_0/3, [fmt, {f, args}])
+  # change result (ok/error) of fmt to ok/error
+  def fmap(fmt, {f, args}) do
+    prim(&fmap_0/4, [fmt, f, args])
   end
 
-  defp fmap_0(input, fmt, {f, args}) do
-    case invoke(fmt, input) do
+  defp map_0(result, f, args) do
+    case result do
       {:ok, b} -> apply(f, [b] ++ args)
       err -> err
     end
   end
 
-  def fmap(fmt, {f, args}) do
-    prim(&fmap_0/3, [fmt, {f, args}])
+  # change successful output of fmt, to ok/error.
+  def map(fmt, {f, args}) do
+    fmap(fmt, {&map_0/3, [f, args]})
   end
 
-  defp return_0(_input, v) do
-    {:ok, v}
+  defp cofmap_0(value, fmt, f, args) do
+    case apply(f, [value] ++ args) do
+      {:ok, v} -> invoke(fmt, v)
+      {:error, reason} -> {:error, reason}
+    end
   end
 
-  defp return(v) do
-    prim(&return_0/2, [v])
+  # change a value or fail before formatting to ok/error
+  def cofmap(fmt, {f, args}) do
+    prim(&cofmap_0/4, [fmt, f, args])
   end
+
+  defp comap_0(input, f, args) do
+    {:ok, apply(f, [input] ++ args)}
+  end
+
+  # change a value before formatting.
+  def comap(fmt, {f, args}) do
+    cofmap(fmt, {&comap_0/3, [f, args]})
+  end
+
+  # defp return_0(_input, v) do
+  #   {:ok, v}
+  # end
+
+  # defp return(v) do
+  #  prim(&return_0/2, [v])
+  # end
 
   # def error(_fmt, e) do
   #   fn input -> {:error, e} end
   # end
 
-  def empty(), do: return(<<>>)
+  # def empty(), do: return(<<>>)
 
   ############################################################
 
-  defp concat_0(input, left, right) do
-    case input do
-      [input_l, input_r] ->
-        case invoke(left, input_l) do
-          {:ok, left_res} ->
-            case invoke(right, input_r) do
-              {:ok, right_res} ->
-                {:ok, left_res <> right_res}
+  # defp concat_0(input, left, right) do
+  #   case input do
+  #     [input_l, input_r] ->
+  #       case invoke(left, input_l) do
+  #         {:ok, left_res} ->
+  #           case invoke(right, input_r) do
+  #             {:ok, right_res} ->
+  #               {:ok, left_res <> right_res}
 
-              err ->
-                err
-            end
+  #             err ->
+  #               err
+  #           end
 
-          err ->
-            err
-        end
+  #         err ->
+  #           err
+  #       end
 
-      _ ->
-        {:error, {:list_of_two_expected, input}}
-    end
-  end
+  #     _ ->
+  #       {:error, {:list_of_two_expected, input}}
+  #   end
+  # end
 
-  def concat(left, right) when is_format(left) and is_format(right) do
-    cond do
-      left == empty() ->
-        right
+  # def concat(left, right) when is_format(left) and is_format(right) do
+  #   cond do
+  #     left == empty() ->
+  #       right
 
-      right == empty() ->
-        left
+  #     right == empty() ->
+  #       left
 
-      true ->
-        prim(&concat_0/3, [left, right])
-    end
-  end
+  #     true ->
+  #       prim(&concat_0/3, [left, right])
+  #   end
+  # end
 
   defp choice_0(input, c, cr) do
     case cr do
@@ -117,10 +136,10 @@ defmodule Active.Formatter do
     end
   end
 
-  def choice(fmt \\ empty(), choices) do
+  def choice(choices) do
     # TODO when length(choices) >= 2
     case choices do
-      [c1 | cr] -> concat(fmt, prim(&choice_0/3, [c1, cr]))
+      [c1 | cr] -> prim(&choice_0/3, [c1, cr])
     end
 
     # TODO: change error into 'expected one of...'
@@ -153,18 +172,18 @@ defmodule Active.Formatter do
   the number would not have the given minimal number of digits. Results in
   an error if it would require more digits than the given maximum.
   """
-  def non_neg_integer(fmt \\ empty(), digits_or_min_max)
+  def non_neg_integer(digits_or_min_max)
 
-  def non_neg_integer(fmt, digits_or_min_max) when is_integer(digits_or_min_max) do
-    non_neg_integer(fmt, min: digits_or_min_max, max: digits_or_min_max)
+  def non_neg_integer(digits_or_min_max) when is_integer(digits_or_min_max) do
+    non_neg_integer(min: digits_or_min_max, max: digits_or_min_max)
   end
 
-  def non_neg_integer(fmt, min: min) do
-    non_neg_integer(fmt, min: min, max: :infinity)
+  def non_neg_integer(min: min) do
+    non_neg_integer(min: min, max: :infinity)
   end
 
-  def non_neg_integer(fmt, min: min, max: max) do
-    concat(fmt, prim(&non_neg_integer_0/3, [min, max]))
+  def non_neg_integer(min: min, max: max) do
+    prim(&non_neg_integer_0/3, [min, max])
   end
 
   defp byte_string_0(s, range, min, max) do
@@ -182,26 +201,25 @@ defmodule Active.Formatter do
   # TODO: add string()? using erlang:iconv or Codepagex?
 
   @spec byte_string(
-          t(),
           [char],
           pos_integer() | [{:min, non_neg_integer()} | {:max, pos_integer()}]
         ) :: t()
-  def byte_string(fmt \\ empty(), range, count_or_min_max)
+  def byte_string(range, count_or_min_max)
 
-  def byte_string(fmt, range, count_or_min_max) when is_integer(count_or_min_max) do
-    byte_string(fmt, min: count_or_min_max, max: count_or_min_max)
+  def byte_string(range, count_or_min_max) when is_integer(count_or_min_max) do
+    byte_string(range, min: count_or_min_max, max: count_or_min_max)
   end
 
-  def byte_string(fmt, range, min: min) do
-    byte_string(fmt, range, min: min, max: :infinity)
+  def byte_string(range, min: min) do
+    byte_string(range, min: min, max: :infinity)
   end
 
-  def byte_string(fmt, range, min: min, max: max) do
-    concat(fmt, prim(&byte_string_0/4, [range, min, max]))
+  def byte_string(range, min: min, max: max) do
+    prim(&byte_string_0/4, [range, min, max])
   end
 
-  defp label_0(input, fmt, label) do
-    case invoke(fmt, input) do
+  defp label_0(result, label) do
+    case result do
       {:error, e} -> {:error, {label, e}}
       ok -> ok
     end
@@ -212,7 +230,7 @@ defmodule Active.Formatter do
   """
   # label for error reports
   def label(fmt, label) do
-    prim(&label_0/3, [fmt, label])
+    fmap(fmt, {&label_0/2, [label]})
   end
 
   # def line(to_wrap), do: nil
@@ -220,44 +238,58 @@ defmodule Active.Formatter do
   # def unmap() ?
   # def unreduce() expand?
 
-  def optional(fmt \\ empty(), option) do
-    concat(fmt, choice([option, empty()]))
+  defp optional_0(input, option) do
+    case input do
+      nil -> {:ok, <<>>}
+      _ -> invoke(option, input)
+    end
+  end
+
+  @doc """
+  Use format 'option' only if input is not nil. Return <<>> if it is nil.
+  """
+  def optional(option) do
+    prim(&optional_0/2, [option])
   end
 
   # def repeat
 
   # def times(to_repeat, count_or_min_max), do: nil
 
-  defp const_0(result, binary) do
-    result <> binary
+  defp append_const_0(result, binary) do
+    {:ok, result <> binary}
   end
 
-  # equiv to ignore(string(empty, s)) in nimble; i.e. you can only ignore constants.
   @doc """
-  Does not consume any values and appends the given binary to the result of the given formatter.
+  Append the given binary after the output of the given format.
   """
-  def const(fmt \\ empty(), binary)
-
-  def const(fmt, binary) do
-    map(fmt, {&const_0/2, [binary]})
+  def append_const(fmt, binary) do
+    map(fmt, {&append_const_0/2, [binary]})
   end
 
-  defp untag_0(input, to_tag, tag) do
+  defp prepend_const_0(result, binary) do
+    {:ok, binary <> result}
+  end
+
+  def prepend_const(fmt, binary) do
+    map(fmt, {&prepend_const_0/2, [binary]})
+  end
+
+  defp untag_0(input, tag) do
     case input do
-      {^tag, v} -> invoke(to_tag, v)
+      {^tag, v} -> {:ok, v}
       _ -> {:error, {:expected_tagged_tuple, tag, input}}
     end
   end
 
-  @spec untag(t, t, term) :: t
   @spec untag(t, term) :: t
   @doc """
   Takes `{tag, v}` from the value list, formats `v` with `to_tag`.
   """
-  def untag(fmt \\ empty(), to_tag, tag)
+  def untag(to_tag, tag)
 
-  def untag(fmt, to_tag, tag) do
-    concat(fmt, prim(&untag_0/3, [to_tag, tag]))
+  def untag(to_tag, tag) do
+    cofmap(to_tag, {&untag_0/2, [tag]})
   end
 
   # @doc """
@@ -303,30 +335,32 @@ defmodule Active.Formatter do
     prim(&list_0/2, [formatters])
   end
 
+  # TODO: tuple
+
   defp unstruct_0(input, fields_formats) do
     {fields, formats} = Enum.unzip(fields_formats)
     values = Enum.map(fields, fn f -> Map.get(input, f) end)
     invoke(list(formats), values)
   end
 
-  @spec unstruct(t, %{atom => t}) :: t
-  def unstruct(fmt \\ empty(), fields_formats) do
-    concat(fmt, prim(&unstruct_0/2, [fields_formats]))
+  @spec unstruct(%{atom => t}) :: t
+  def unstruct(fields_formats) do
+    prim(&unstruct_0/2, [fields_formats])
   end
 
-  defp unwrap_0(input, on_element) do
-    case input do
-      [v] -> invoke(on_element, v)
-      _ -> {:error, {:expected_one_element_list, input}}
-    end
-  end
+  # defp unwrap_0(input, on_element) do
+  #   case input do
+  #     [v] -> invoke(on_element, v)
+  #     _ -> {:error, {:expected_one_element_list, input}}
+  #   end
+  # end
 
-  @doc """
-  Expects the input to be a one element list, and then applying the given formatter on the element.
-  """
-  def unwrap(fmt \\ empty(), on_element) do
-    concat(fmt, prim(&unwrap_0/2, [on_element]))
-  end
+  # @doc """
+  # Expects the input to be a one element list, and then applying the given formatter on the element.
+  # """
+  # def unwrap(fmt \\ empty(), on_element) do
+  #   concat(fmt, prim(&unwrap_0/2, [on_element]))
+  # end
 
   @doc """
   Defines a formatter with the given name and the given

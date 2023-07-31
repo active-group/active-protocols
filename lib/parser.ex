@@ -59,9 +59,9 @@ defmodule Active.Parser do
     prim(&return_0/2, [v])
   end
 
-  def empty() do
-    return(@nothing)
-  end
+  # def empty() do
+  #   return(@nothing)
+  # end
 
   defp concat_0(result, right) do
     case result do
@@ -86,23 +86,17 @@ defmodule Active.Parser do
     end
   end
 
+  @doc """
+  For two parsers that return a list of values, concatenate the results of both.
+  """
   def concat(left, right) when is_parser(left) and is_parser(right) do
-    cond do
-      left == empty() ->
-        right
-
-      right == empty() ->
-        left
-
-      true ->
-        fmap(
-          left,
-          {&concat_0/2, [right]}
-        )
-    end
+    fmap(
+      left,
+      {&concat_0/2, [right]}
+    )
   end
 
-  defp choice_00(bytes, c1, cr) do
+  defp choice_0(bytes, c1, cr) do
     case invoke(c1, bytes) do
       {:ok, output, rest} ->
         {:ok, output, rest}
@@ -111,18 +105,22 @@ defmodule Active.Parser do
         case cr do
           [] -> err
           [c] -> invoke(c, bytes)
-          [c1 | cr] -> choice_00(bytes, c1, cr)
+          [c1 | cr] -> choice_0(bytes, c1, cr)
         end
     end
   end
 
-  defp choice_0(c1, cr) do
-    prim(&choice_00/3, [c1, cr])
+  defp choice_err(result, choices) do
+    case result do
+      # Note: include last reason because it might include the input (could be done nicer)
+      {:error, reason} -> {:error, {:no_choices_matched, choices, reason}}
+      ok -> ok
+    end
   end
 
-  def choice(p \\ empty(), choices) do
+  def choice(choices) do
     [c1 | cr] = choices
-    concat(p, choice_0(c1, cr))
+    fmap(prim(&choice_0/3, [c1, cr]), {&choice_err/2, [choices]})
   end
 
   defp any_byte_string_00(bytes, min, max) do
@@ -151,13 +149,13 @@ defmodule Active.Parser do
     prim(&any_byte_string_00/3, [min, max])
   end
 
-  def any_byte_string(p \\ empty(), count_or_min_max) do
-    concat(p, any_byte_string_0(count_or_min_max))
+  def any_byte_string(count_or_min_max) do
+    any_byte_string_0(count_or_min_max)
   end
 
-  def byte_string(p \\ empty(), range, count_or_min_max) do
+  def byte_string(range, count_or_min_max) do
     # TODO: check for range.
-    any_byte_string(p, count_or_min_max)
+    any_byte_string(count_or_min_max)
   end
 
   defp label_0(return, label) do
@@ -167,7 +165,7 @@ defmodule Active.Parser do
     end
   end
 
-  def label(p \\ empty(), label) do
+  def label(p, label) do
     fmap(
       p,
       {&label_0/2, [label]}
@@ -182,14 +180,42 @@ defmodule Active.Parser do
     end
   end
 
+  defp const_1(bytes) do
+    map(any_byte_string(byte_size(bytes)), {&const_0/3, [bytes]})
+  end
+
+  defp prepend_ignore(input, p, ign) do
+    case invoke(ign, input) do
+      {:ok, _, rest} -> invoke(p, rest)
+      err -> err
+    end
+  end
+
+  defp append_ignore(input, p, ign) do
+    case invoke(p, input) do
+      {:ok, v, rest} ->
+        case invoke(ign, rest) do
+          {:ok, _, rest} -> {:ok, v, rest}
+          err -> err
+        end
+
+      err ->
+        err
+    end
+  end
+
   @doc """
-  Expect bytes, but don't generate a parser result. Cannot be used on its own.
+  Expect bytes, before parsing with p.
   """
-  def const(p \\ empty(), bytes) do
-    concat(
-      p,
-      map(any_byte_string(byte_size(bytes)), {&const_0/3, [bytes]})
-    )
+  def prepend_const(p, bytes) do
+    prim(&prepend_ignore/3, [p, const_1(bytes)])
+  end
+
+  @doc """
+  Expect bytes, after parsing with p.
+  """
+  def append_const(p, bytes) do
+    prim(&append_ignore/3, [p, const_1(bytes)])
   end
 
   defp optional_0(bytes, option) do
@@ -200,18 +226,18 @@ defmodule Active.Parser do
   end
 
   @doc """
-  Parses nil if the given parser 'option' does not match.
+  Results in nil if the given parser 'option' does not match.
   """
-  def optional(p \\ empty(), option) when is_parser(option) do
-    concat(p, prim(&optional_0/2, [option]))
+  def optional(option) when is_parser(option) do
+    prim(&optional_0/2, [option])
   end
 
   defp tag_0(output, rest, tag) do
     {:ok, {tag, output}, rest}
   end
 
-  def tag(p \\ empty(), to_tag, tag) do
-    concat(p, map(to_tag, {&tag_0/3, [tag]}))
+  def tag(to_tag, tag) do
+    map(to_tag, {&tag_0/3, [tag]})
   end
 
   defp non_neg_integer_0(s, rest) do
@@ -223,13 +249,10 @@ defmodule Active.Parser do
   end
 
   @digits [?0..?9]
-  def non_neg_integer(p \\ empty(), digits_or_min_max) do
-    concat(
-      p,
-      map(
-        byte_string(@digits, digits_or_min_max),
-        {&non_neg_integer_0/2, []}
-      )
+  def non_neg_integer(digits_or_min_max) do
+    map(
+      byte_string(@digits, digits_or_min_max),
+      {&non_neg_integer_0/2, []}
     )
   end
 
@@ -239,20 +262,17 @@ defmodule Active.Parser do
 
   defp concat_rev(right, left), do: concat(left, right)
 
-  def list(p \\ empty(), parsers) do
+  def list(parsers) do
     # TODO: something more efficient?
-    concat(p, Enum.reduce(Enum.map(parsers, &wrap/1), &concat_rev/2))
+    Enum.reduce(Enum.map(parsers, &wrap/1), &concat_rev/2)
   end
 
-  def structure(p \\ empty(), struct, fields_parsers) do
+  def structure(struct, fields_parsers) do
     {fields, parsers} = Enum.unzip(fields_parsers)
 
-    concat(
-      p,
-      map(
-        list(parsers),
-        {&structure_0/4, [struct, fields]}
-      )
+    map(
+      list(parsers),
+      {&structure_0/4, [struct, fields]}
     )
   end
 
@@ -261,8 +281,8 @@ defmodule Active.Parser do
     {:ok, wrapped, rest}
   end
 
-  def wrap(p \\ empty(), to_wrap) do
-    concat(p, map(to_wrap, {&wrap_0/2, []}))
+  def wrap(to_wrap) do
+    map(to_wrap, {&wrap_0/2, []})
   end
 
   @doc """

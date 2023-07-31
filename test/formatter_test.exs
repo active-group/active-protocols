@@ -41,11 +41,11 @@ defmodule FormatterTest do
     assert invoke(fmt, v2) == {:ok, r2}
   end
 
-  test "concat" do
+  test "list" do
     {fmt1, v1, r1} = good_example_1()
     {fmt2, v2, r2} = good_example_2()
 
-    assert invoke(concat(fmt1, fmt2), [v1, v2]) == {:ok, r1 <> r2}
+    assert invoke(list([fmt1, fmt2]), [v1, v2]) == {:ok, r1 <> r2}
   end
 
   test "label" do
@@ -55,7 +55,9 @@ defmodule FormatterTest do
   end
 
   test "const" do
-    assert invoke(const("A"), []) == {:ok, "A"}
+    {fmt1, v1, r1} = good_example_1()
+    assert invoke(prepend_const(fmt1, "A"), v1) == {:ok, "A" <> r1}
+    assert invoke(append_const(fmt1, "A"), v1) == {:ok, r1 <> "A"}
   end
 
   test "untag" do
