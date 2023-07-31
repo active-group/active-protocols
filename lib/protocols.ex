@@ -46,6 +46,8 @@ defmodule Active.Protocols do
           )
         end
 
+        def stop_listener(name), do: :ranch.stop_listener(name)
+
         def get_port(name) do
           :ranch.get_port(name)
         end
@@ -55,7 +57,7 @@ defmodule Active.Protocols do
     defmodule RanchProtocol do
       @behaviour :ranch_protocol
 
-      def start_link(ref, _transport, opts) do
+      def start_link(ref, _socket, _transport, opts) do
         mod = opts[:module]
         telegrams = opts[:telegrams]
 
@@ -63,6 +65,7 @@ defmodule Active.Protocols do
           # Note: handshake has to be done in the protocol process; otherwise it will hang.
           # Note: I think handshake will suceed with simple tcp as the transport.
           {:ok, ip_socket} = :ranch.handshake(ref)
+          # TODO: Use _transport.recv and .send and .close
           Active.TelegramTCPSocket.socket(ip_socket, telegrams)
         end
 
