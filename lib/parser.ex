@@ -51,13 +51,13 @@ defmodule Active.Parser do
     )
   end
 
-  defp return_0(bytes, v) do
-    {:ok, v, bytes}
-  end
+  # defp return_0(bytes, v) do
+  #   {:ok, v, bytes}
+  # end
 
-  defp return(v) do
-    prim(&return_0/2, [v])
-  end
+  # defp return(v) do
+  #   prim(&return_0/2, [v])
+  # end
 
   # def empty() do
   #   return(@nothing)

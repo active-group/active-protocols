@@ -4,6 +4,8 @@ defmodule Active.Telegram.Coding do
     quote do
       require Active.Coding
 
+      def coding(), do: unquote(opts[:coding])
+
       Active.Coding.defcoding(:encode_, :decode_, unquote(opts[:coding]))
 
       use Active.Telegram
