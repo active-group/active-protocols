@@ -1,7 +1,7 @@
-defmodule Coding.DSLTest do
+defmodule Coding.Test do
   use ExUnit.Case
 
-  import Active.Coding.DSL
+  import Active.Coding
 
   defcoding(:test_enc, :test_dec, non_neg_integer(2))
 
@@ -69,14 +69,5 @@ defmodule Coding.DSLTest do
     {c1, b1, v1} = good_example_1()
     assert roundtrip(optional(c1), b1, v1) == :ok
     assert roundtrip(optional(c1), "", nil) == :ok
-  end
-
-  defmodule TestTelegram do
-    use Active.Coding.Telegram, coding: non_neg_integer(2)
-  end
-
-  test "as telegram" do
-    {:ok, binary} = TestTelegram.encode(12)
-    {:ok, 12, <<>>} = TestTelegram.decode(binary)
   end
 end
