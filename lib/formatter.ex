@@ -342,7 +342,7 @@ defmodule Active.Formatter do
 
     case Enum.reduce(fields, true, fn f, acc -> acc && Map.has_key?(input, f) end) do
       true ->
-        values = Enum.map(fields, fn f -> Map.get(input, f) end)
+        values = Enum.map(fields, fn f -> Map.fetch!(input, f) end)
         invoke(list(formats), values)
 
       false ->
