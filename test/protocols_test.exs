@@ -91,4 +91,53 @@ defmodule ProtocolsTest do
     assert Client.request(conn, %Telegram1{message: "Ba"}, 100) ==
              {:error, {:recv_failed, :closed}}
   end
+
+  defmodule UDPServer do
+    use Protocols.UDPServerRequestResponse, telegrams: ExampleTelegrams
+
+    @impl true
+    def init_session(_socket, _args) do
+      # info = :inet.peername(socket)
+      # a counter as the session state
+      0
+    end
+
+    @impl true
+    def handle_request(session, request) do
+      alias ExampleTelegrams.Telegram1
+      alias ExampleTelegrams.Telegram2
+
+      case request do
+        %Telegram1{} ->
+          {:reply, %Telegram2{counter: session}, session + 1}
+      end
+    end
+
+    @impl true
+    def handle_error(_session, _reason) do
+      # called on decode and receive errors, for logging, etc.
+      :close
+    end
+  end
+
+  defmodule UDPClient do
+    use Active.Protocols.UDPClientRequestResponse, telegrams: ExampleTelegrams
+  end
+
+  test "udp request-response round trip" do
+    alias ExampleTelegrams.Telegram1
+    alias ExampleTelegrams.Telegram2
+
+    {:ok, pid} = UDPServer.start_listener({0, 0, 0, 0}, 0, nil)
+
+    port = UDPServer.get_port(pid)
+
+    {:ok, conn} = UDPClient.connect({127, 0, 0, 1}, port, 100)
+
+    assert UDPClient.request(conn, %Telegram1{message: "Fo"}, 100) ==
+             {:ok, %Telegram2{counter: 0}}
+
+    assert UDPClient.request(conn, %Telegram1{message: "Ba"}, 100) ==
+             {:ok, %Telegram2{counter: 1}}
+  end
 end

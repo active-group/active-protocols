@@ -10,7 +10,7 @@ defmodule ExampleTelegrams do
         <<1, _::binary-size(1)>> -> :eof
         <<1>> -> :eof
         <<>> -> :eof
-        _ -> {:error, :expected_1}
+        _ -> {:error, {:expected_1, bytes}}
       end
     end
 
@@ -29,7 +29,7 @@ defmodule ExampleTelegrams do
         <<2, counter, rest::binary>> -> {:ok, %Telegram2{counter: counter}, rest}
         <<2>> -> :eof
         <<>> -> :eof
-        _ -> {:error, :expected_2}
+        _ -> {:error, {:expected_2, bytes}}
       end
     end
 

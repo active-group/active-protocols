@@ -80,13 +80,13 @@ defmodule Active.Protocols do
 
     then
 
-    {:ok, pid} = start_listener(name, address, port, idle_timeout, use_arg)
+    {:ok, pid} = start_listener(name, address, port, idle_timeout, user_arg)
 
     stop_listener(name)
 
     get_port(name)
 
-    use_arg is passed to init_session.
+    user_arg is passed to init_session.
     """
 
     @type telegram :: term
@@ -160,6 +160,131 @@ defmodule Active.Protocols do
     end
   end
 
+  defmodule UDPServer do
+    # @type serve :: ((TelegramUDPSocket.t(), term) -> :ok)
+    alias Active.TelegramUDPSocket
+
+    def start_listener(address, port, telegrams, {init, init_args}, serve) do
+      case :gen_udp.open(port, active: false, ip: address, reuseaddr: true, mode: :binary) do
+        {:error, reason} ->
+          {:error, {:error_open_udp_socket, reason}}
+
+        {:ok, ip_socket} ->
+          socket = TelegramUDPSocket.socket(ip_socket, telegrams)
+          session = apply(init, [socket] ++ init_args)
+          GenServer.start_link(__MODULE__, serve: serve, socket: socket, session: session)
+      end
+    end
+
+    def get_port(pid) do
+      # Note: fail if not ok, to match ranch api :-/
+      {:ok, port} = GenServer.call(pid, :get_port)
+      port
+    end
+
+    def stop_listener(pid) do
+      GenServer.call(pid, :stop)
+    end
+
+    ####
+
+    use GenServer
+
+    @impl GenServer
+    def init(args) do
+      serve = args[:serve]
+      socket = args[:socket]
+      session = args[:session]
+      {:ok, worker} = Task.start_link(fn -> serve.(socket, session) end)
+      {:ok, %{socket: socket, worker: worker}}
+    end
+
+    @impl GenServer
+    def handle_call(:get_port, _from, state) do
+      {:reply, TelegramUDPSocket.get_port(state.socket), state}
+    end
+
+    @impl GenServer
+    def handle_call(:stop, _from, state) do
+      Process.exit(state.worker, :normal)
+      TelegramUDPSocket.close(state.socket)
+      {:reply, :ok, state}
+    end
+  end
+
+  defmodule UDPServerRequestResponse do
+    @moduledoc """
+    use TCPServerRequestResponse, ...
+
+    then
+
+    {:ok, pid} = start_listener(address, port, user_arg)
+
+    stop_listener(pid)
+
+    get_port(pid)
+
+    use_arg is passed to init_session.
+
+    Note: there are no actual sessions, resp. only one session for the whole server.
+    """
+
+    @type telegram :: term
+
+    @type session :: term
+
+    @callback init_session(Active.TelegramTCPSocket.t(), term) :: session
+
+    @callback handle_request(session, telegram) ::
+                {:reply, telegram, session} | {:noreply, session}
+
+    @callback handle_error(session, term) :: :close | {:continue, session} | {:fail, term}
+
+    defmacro __using__(opts) do
+      quote do
+        def telegrams, do: unquote(opts[:telegrams])
+
+        @behaviour Active.Protocols.UDPServerRequestResponse
+
+        defp serve(socket, session) do
+          alias Active.TelegramUDPSocket
+
+          # TODO: errors, with option to :continue, :close, etc.
+          case TelegramUDPSocket.recv(socket, :infinity) do
+            {:ok, {source_addr, source_port, request}} ->
+              case handle_request(session, request) do
+                {:reply, response, session} ->
+                  case TelegramUDPSocket.send(socket, source_addr, source_port, response) do
+                    :ok -> serve(socket, session)
+                  end
+
+                {:noreply, session} ->
+                  serve(socket, session)
+              end
+          end
+        end
+
+        def start_listener(address, port, user_arg) do
+          Active.Protocols.UDPServer.start_listener(
+            address,
+            port,
+            telegrams(),
+            {&init_session/2, [user_arg]},
+            &serve/2
+          )
+        end
+
+        def stop_listener(pid) do
+          Active.Protocols.UDPServer.stop_listener(pid)
+        end
+
+        def get_port(pid) do
+          Active.Protocols.UDPServer.get_port(pid)
+        end
+      end
+    end
+  end
+
   defmodule TCPClientRequestResponse do
     defmacro __using__(opts) do
       quote do
@@ -205,7 +330,49 @@ defmodule Active.Protocols do
     end
   end
 
-  defmodule UDPServerRequestResponse do
-    # TODO: can have basically the same callbacks as TCPServerRequestResponse, without the session.
+  defmodule UDPClientRequestResponse do
+    defmacro __using__(opts) do
+      quote do
+        def telegrams, do: unquote(opts[:telegrams])
+
+        def connect(host, port, connect_timeout) do
+          case :gen_udp.open(0, ip: host, active: false, mode: :binary) do
+            {:error, reason} ->
+              {:error, reason}
+
+            {:ok, ip_socket} ->
+              :ok = :gen_udp.connect(ip_socket, host, port)
+              {:ok, Active.TelegramUDPSocket.socket(ip_socket, telegrams())}
+          end
+        end
+
+        def close(socket), do: Active.Protocols.UDPClientRequestResponse.do_close(socket)
+
+        def request(socket, telegram, timeout),
+          do: Active.Protocols.UDPClientRequestResponse.do_request(socket, telegram, timeout)
+      end
+    end
+
+    @doc false
+    def do_close(socket) do
+      Active.TelegramUDPSocket.close(socket)
+    end
+
+    @doc false
+    def do_request(socket, telegram, timeout) do
+      case Active.TelegramUDPSocket.send(socket, telegram) do
+        {:error, :closed} ->
+          {:error, {:send_failed, :closed}}
+
+        {:error, reason} ->
+          {:error, {:send_failed, reason}}
+
+        :ok ->
+          case Active.TelegramUDPSocket.recv(socket, timeout) do
+            {:error, reason} -> {:error, {:recv_failed, reason}}
+            {:ok, {_from_host, _from_port, response}} -> {:ok, response}
+          end
+      end
+    end
   end
 end

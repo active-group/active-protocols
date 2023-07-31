@@ -12,12 +12,12 @@ defmodule TelegramsTest do
     assert Telegram1.decode(<<>>) == :eof
     assert Telegram1.decode(<<1, 42, 43>>) == {:ok, %Telegram1{message: <<42, 43>>}, ""}
     assert Telegram1.encode(%Telegram1{message: <<42, 43>>}) == {:ok, <<1, 42, 43>>}
-    assert Telegram1.decode(<<2>>) == {:error, :expected_1}
+    assert Telegram1.decode(<<2>>) == {:error, {:expected_1, <<2>>}}
 
     assert Telegram2.decode(<<>>) == :eof
     assert Telegram2.decode(<<2, 42>>) == {:ok, %Telegram2{counter: 42}, ""}
     assert Telegram2.decode(<<2, 42, 55>>) == {:ok, %Telegram2{counter: 42}, <<55>>}
-    assert Telegram2.decode(<<1>>) == {:error, :expected_2}
+    assert Telegram2.decode(<<1>>) == {:error, {:expected_2, <<1>>}}
 
     v = %Telegram1{message: "xy"}
     assert Telegram1.encode(v) == {:ok, <<1>> <> "xy"}

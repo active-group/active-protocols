@@ -1,4 +1,4 @@
-defmodule TelegramUDPSocket do
+defmodule Active.TelegramUDPSocket do
   defstruct [:ip_socket, :tmodule]
 
   @type t() :: %__MODULE__{}
@@ -37,7 +37,8 @@ defmodule TelegramUDPSocket do
           end
 
         case apply(tmodule, :decode, [bytes]) do
-          {:ok, telegram} -> {:ok, {address, port, telegram}}
+          {:ok, telegram, ""} -> {:ok, {address, port, telegram}}
+          {:ok, _telegram, _rest} -> {:error, {:decode_incomplete, bytes}}
           {:error, reason} -> {:error, {:decode_failed, reason}}
         end
 
@@ -55,7 +56,7 @@ defmodule TelegramUDPSocket do
   end
 
   @doc """
-  For opened sockets (i.e. servers)
+  For unconnected sockets (i.e. servers)
   """
   @spec send(t(), :inet.socket_address(), :inet.port_number(), term) :: :ok | {:error, term}
   def send(socket, address, port, telegram) do
@@ -72,5 +73,9 @@ defmodule TelegramUDPSocket do
 
   def close(socket) do
     :inet.close(socket.ip_socket)
+  end
+
+  def get_port(socket) do
+    :inet.port(socket.ip_socket)
   end
 end
