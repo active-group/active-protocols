@@ -44,7 +44,7 @@ defmodule Active.Parser do
   end
 
   defp map(to_map, {f, args}) do
-    # calls f.(output, rest, ..args)
+    # calls f.(output, rest, ..args) => {:ok, ...}, {:error...}
     fmap(
       to_map,
       {&map_0/2, [{f, args}]}
@@ -123,39 +123,133 @@ defmodule Active.Parser do
     fmap(prim(&choice_0/3, [c1, cr]), {&choice_err/2, [choices]})
   end
 
-  defp any_byte_string_00(bytes, min, max) do
+  defp any_byte_string_00(bytes, count) do
     s = byte_size(bytes)
 
     cond do
-      s < min ->
+      s < count ->
         :eof
 
-      max == :infinity || s == max ->
+      s == count ->
         {:ok, bytes, <<>>}
 
       true ->
-        take = if s < max, do: s, else: max
+        take = count
         p1 = :binary.part(bytes, {0, take})
         p2 = :binary.part(bytes, {take, s - take})
         {:ok, p1, p2}
     end
   end
 
-  defp any_byte_string_0(count_or_min_max) when is_integer(count_or_min_max) do
-    any_byte_string_0(min: count_or_min_max, max: count_or_min_max)
+  def any_byte_string(count) do
+    prim(&any_byte_string_00/2, [count])
   end
 
-  defp any_byte_string_0(min: min, max: max) do
-    prim(&any_byte_string_00/3, [min, max])
+  defp range_predicate_0(bytes, ok_set) do
+    # Note: not very efficient; maybe some :binary.matches would be more efficient...?
+    # !Enum.any?(bytes, fn b -> !Enum.member?(ok, set, b))
+    if byte_size(bytes) == 0 do
+      true
+    else
+      Enum.reduce_while(Range.new(0, byte_size(bytes) - 1), true, fn idx, acc ->
+        if acc do
+          {:cont, MapSet.member?(ok_set, :binary.at(bytes, idx))}
+        else
+          {:halt, false}
+        end
+      end)
+    end
   end
 
-  def any_byte_string(count_or_min_max) do
-    any_byte_string_0(count_or_min_max)
+  defp take_while_0(bytes, pred) do
+    # Note: not very efficient; checks suffix again and again.
+    if byte_size(bytes) == 0 do
+      {:ok, <<>>, <<>>}
+    else
+      ok_part =
+        Enum.reduce_while(Range.new(0, byte_size(bytes)), <<>>, fn len, acc ->
+          start = :binary.part(bytes, {0, len})
+
+          if pred.(start) do
+            {:cont, start}
+          else
+            {:halt, acc}
+          end
+        end)
+
+      rest = :binary.part(bytes, {byte_size(ok_part), byte_size(bytes) - byte_size(ok_part)})
+
+      {:ok, ok_part, rest}
+    end
+  end
+
+  def take_while(pred) do
+    prim(&take_while_0/2, [pred])
+  end
+
+  defp range_predicate(range) do
+    # range can be a Range, or any other Enum
+    set = MapSet.new(range)
+
+    {&range_predicate_0(&1, set), range}
+  end
+
+  defp and_max_0(bytes, pred, max) do
+    res = byte_size(bytes) <= max && pred.(bytes)
+    res
+  end
+
+  defp and_max(pred, max) do
+    &and_max_0(&1, pred, max)
+  end
+
+  defp byte_string_verify_and_more(start, rest, pred, descr, min, max) do
+    if pred.(start) do
+      pred =
+        if max != :infinity do
+          and_max(pred, max - min)
+        else
+          pred
+        end
+
+      case invoke(take_while(pred), rest) do
+        {:ok, more, rest} -> {:ok, start <> more, rest}
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      {:error, {:not_in_range, descr, start}}
+    end
+  end
+
+  defp byte_string_1(pred, descr, min, max) do
+    map(
+      any_byte_string(min),
+      {&byte_string_verify_and_more/6, [pred, descr, min, max]}
+    )
   end
 
   def byte_string(range, count_or_min_max) do
-    # TODO: check for range.
-    any_byte_string(count_or_min_max)
+    {pred, descr} = range_predicate(range)
+
+    {min, max} =
+      if is_integer(count_or_min_max) do
+        {count_or_min_max, count_or_min_max}
+      else
+        {count_or_min_max[:min], count_or_min_max[:max] || :infinity}
+      end
+
+    byte_string_1(pred, descr, min, max)
+  end
+
+  defp from_enc(bytes, rest, encoding) do
+    case Codepagex.to_string(bytes, encoding) do
+      {:ok, s} -> {:ok, s, rest}
+      {:error, reason} -> {:error, {:not_in_encoding, encoding, bytes, reason}}
+    end
+  end
+
+  def char_encoding(string_p, encoding) do
+    map(string_p, {&from_enc/3, [encoding]})
   end
 
   defp label_0(return, label) do
@@ -176,7 +270,7 @@ defmodule Active.Parser do
     if read_bytes == const_bytes do
       {:ok, @nothing, rest}
     else
-      {:error, {:expected, const_bytes}}
+      {:error, {:expected, const_bytes, read_bytes}}
     end
   end
 
@@ -248,7 +342,8 @@ defmodule Active.Parser do
     end
   end
 
-  @digits [?0..?9]
+  @digits ?0..?9
+
   def non_neg_integer(digits_or_min_max) do
     map(
       byte_string(@digits, digits_or_min_max),

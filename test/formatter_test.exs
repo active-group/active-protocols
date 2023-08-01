@@ -13,7 +13,7 @@ defmodule FormatterTest do
 
   def invalid_example(), do: {non_neg_integer(3), ["foo"]}
   def good_example_1(), do: {non_neg_integer(3), 123, "123"}
-  def good_example_2(), do: {byte_string([?a..?z], 3), "abc", "abc"}
+  def good_example_2(), do: {byte_string(?a..?z, 3), "abc", "abc"}
 
   test "integer formatting" do
     assert invoke(non_neg_integer(3), 123) == {:ok, "123"}
@@ -22,12 +22,15 @@ defmodule FormatterTest do
   end
 
   test "string formatting" do
-    assert invoke(byte_string([?0..?9], 3), "123") == {:ok, "123"}
+    assert invoke(byte_string(?0..?9, 3), "123") == {:ok, "123"}
 
-    assert invoke(byte_string([?0..?9], min: 1, max: 3), "123") == {:ok, "123"}
-    assert invoke(byte_string([?0..?9], min: 1, max: 3), "1") == {:ok, "1"}
+    assert invoke(byte_string(?0..?9, 3), "abc") ==
+             {:error, {:invalid_chars, MapSet.new(?0..?9), "abc"}}
 
-    assert invoke(byte_string([?0..?9], 3), "1") ==
+    assert invoke(byte_string(?0..?9, min: 1, max: 3), "123") == {:ok, "123"}
+    assert invoke(byte_string(?0..?9, min: 1, max: 3), "1") == {:ok, "1"}
+
+    assert invoke(byte_string(?0..?9, 3), "1") ==
              {:error, {:wrong_string_size, "1", 3, 3}}
   end
 

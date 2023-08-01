@@ -21,7 +21,7 @@ defmodule ParserTest do
 
   def invalid_example(), do: {non_neg_integer(3), "foo"}
   def good_example_1(), do: {non_neg_integer(3), "123", 123}
-  def good_example_2(), do: {byte_string([?a..?z], 3), "abc", "abc"}
+  def good_example_2(), do: {byte_string(?a..?z, 3), "abc", "abc"}
 
   test "integer parsing" do
     assert invoke_full(non_neg_integer(3), "123") == {:ok, 123}
@@ -30,12 +30,22 @@ defmodule ParserTest do
   end
 
   test "string parsing" do
-    assert invoke_full(byte_string([?0..?9], 3), "123") == {:ok, "123"}
+    assert invoke_full(byte_string(?0..?9, 3), "123") == {:ok, "123"}
 
-    assert invoke_full(byte_string([?0..?9], min: 1, max: 3), "123") == {:ok, "123"}
-    assert invoke_full(byte_string([?0..?9], min: 1, max: 3), "1") == {:ok, "1"}
+    assert invoke_full(byte_string(?0..?9, min: 1, max: 3), "123") == {:ok, "123"}
+    assert invoke_full(byte_string(?0..?9, min: 1, max: 3), "1") == {:ok, "1"}
 
-    assert invoke_full(byte_string([?0..?9], 3), "1") == :eof
+    assert invoke_full(byte_string(?0..?9, 3), "1") == :eof
+  end
+
+  test "delimited string parsing" do
+    p = append_const(byte_string(?0..?9, min: 1, max: 3), "X")
+
+    assert invoke_full(p, "X") == {:error, {:not_in_range, ?0..?9, "X"}}
+    assert invoke_full(p, "1X") == {:ok, "1"}
+    assert invoke_full(p, "12X") == {:ok, "12"}
+    assert invoke_full(p, "123X") == {:ok, "123"}
+    assert invoke_full(p, "1234X") == {:error, {:expected, "X", "4"}}
   end
 
   test "choice" do

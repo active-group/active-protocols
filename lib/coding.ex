@@ -68,6 +68,25 @@ defmodule Active.Coding do
     {F.unstruct(Enum.zip(fields, fs)), P.structure(struct, Enum.zip(fields, ps))}
   end
 
+  @doc """
+  For codings then encode a byte string, resp. decode into a byte string, convert it according to the given 8bit-character encoding from/into a utf8 string (proper Elixir strings).
+  """
+
+  def char_encoding(string_c, encoding) do
+    {string_f, string_p} = string_c
+    {F.char_encoding(string_f, encoding), P.char_encoding(string_p, encoding)}
+  end
+
+  defmodule CharRange do
+    def any, do: 0..255
+    def digits, do: ?0..?9
+    def ascii_printable, do: 32..126
+
+    def except(base_range, exclude_char) do
+      Enum.filter(base_range, fn c -> c != exclude_char end)
+    end
+  end
+
   @doc false
   # only for macro
   def formatter(coding) do

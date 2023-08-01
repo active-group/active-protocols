@@ -147,7 +147,6 @@ defmodule Active.Formatter do
   end
 
   defp non_neg_integer_0(v, min, max) do
-    # TODO: check if v is non-neg, add padding (option if '0' or ' '? front or back?), etc.
     cond do
       !is_integer(v) ->
         {:error, {:integer_expected, v}}
@@ -187,18 +186,33 @@ defmodule Active.Formatter do
   end
 
   defp byte_string_0(s, range, min, max) do
-    # TODO: check if all bytes are in the range, maybe pad with ' ' if too short? (option if front or back?)
-    if is_binary(s) do
-      case byte_size(s) do
-        l when l >= min and (max == :infinity or l <= max) -> {:ok, s}
-        _ -> {:error, {:wrong_string_size, s, min, max}}
-      end
+    bad = Enum.any?(:binary.bin_to_list(s), fn c -> not Enum.member?(range, c) end)
+
+    if bad do
+      {:error, {:invalid_chars, range, s}}
     else
-      {:error, {:string_expected, s}}
+      if is_binary(s) do
+        case byte_size(s) do
+          l when l >= min and (max == :infinity or l <= max) -> {:ok, s}
+          _ -> {:error, {:wrong_string_size, s, min, max}}
+        end
+      else
+        {:error, {:string_expected, s}}
+      end
     end
   end
 
-  # TODO: add string()? using erlang:iconv or Codepagex?
+  defp to_enc(str, encoding) do
+    # TODO: replace-non-existent? from_string("Hello æøå!", :ascii, replace_nonexistent("_"))
+    case Codepagex.from_string(str, encoding) do
+      {:ok, bytes} -> {:ok, bytes}
+      {:error, reason} -> {:error, {:not_encodable, encoding, str, reason}}
+    end
+  end
+
+  def char_encoding(string_fmt, encoding) do
+    cofmap(string_fmt, {&to_enc/2, [encoding]})
+  end
 
   @spec byte_string(
           [char],
@@ -215,7 +229,7 @@ defmodule Active.Formatter do
   end
 
   def byte_string(range, min: min, max: max) do
-    prim(&byte_string_0/4, [range, min, max])
+    prim(&byte_string_0/4, [MapSet.new(range), min, max])
   end
 
   defp label_0(result, label) do
@@ -334,8 +348,6 @@ defmodule Active.Formatter do
   def list(formatters) do
     prim(&list_0/2, [formatters])
   end
-
-  # TODO: tuple
 
   defp unstruct_0(input, fields_formats) do
     {fields, formats} = Enum.unzip(fields_formats)
