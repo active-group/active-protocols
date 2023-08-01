@@ -132,7 +132,7 @@ defmodule ProtocolsTest do
 
     port = UDPServer.get_port(pid)
 
-    {:ok, conn} = UDPClient.connect({127, 0, 0, 1}, port, 100)
+    {:ok, conn} = UDPClient.connect({127, 0, 0, 1}, port)
 
     assert UDPClient.request(conn, %Telegram1{message: "Fo"}, 100) ==
              {:ok, %Telegram2{counter: 0}}

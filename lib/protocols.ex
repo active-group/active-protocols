@@ -335,7 +335,7 @@ defmodule Active.Protocols do
       quote do
         def telegrams, do: unquote(opts[:telegrams])
 
-        def connect(host, port, connect_timeout) do
+        def connect(host, port) do
           case :gen_udp.open(0, ip: host, active: false, mode: :binary) do
             {:error, reason} ->
               {:error, reason}
