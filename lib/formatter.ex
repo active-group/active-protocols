@@ -5,7 +5,8 @@ defmodule Active.Formatter do
     defstruct [:f, :args]
   end
 
-  @opaque t() :: %Fmt{}
+  # can't be @opaque, can it?
+  @type t() :: %Fmt{}
 
   defmacro is_format(v) do
     quote do
@@ -186,19 +187,19 @@ defmodule Active.Formatter do
   end
 
   defp byte_string_0(s, range, min, max) do
-    bad = Enum.any?(:binary.bin_to_list(s), fn c -> not Enum.member?(range, c) end)
+    if is_binary(s) do
+      bad = Enum.any?(:binary.bin_to_list(s), fn c -> not Enum.member?(range, c) end)
 
-    if bad do
-      {:error, {:invalid_chars, range, s}}
-    else
-      if is_binary(s) do
+      if bad do
+        {:error, {:invalid_chars, range, s}}
+      else
         case byte_size(s) do
           l when l >= min and (max == :infinity or l <= max) -> {:ok, s}
           _ -> {:error, {:wrong_string_size, s, min, max}}
         end
-      else
-        {:error, {:string_expected, s}}
       end
+    else
+      {:error, {:string_expected, s}}
     end
   end
 
@@ -214,8 +215,11 @@ defmodule Active.Formatter do
     cofmap(string_fmt, {&to_enc/2, [encoding]})
   end
 
+  # TODO: same as in coding...
+  @type range :: term
+
   @spec byte_string(
-          [char],
+          term,
           pos_integer() | [{:min, non_neg_integer()} | {:max, pos_integer()}]
         ) :: t()
   def byte_string(range, count_or_min_max)

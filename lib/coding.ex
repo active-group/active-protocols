@@ -7,13 +7,14 @@ defmodule Active.Coding do
   @type t() :: {F.t(), P.t()}
 
   @type int_or_min_max :: pos_integer | [{:min, pos_integer} | {:max, pos_integer | :infinity}]
+  @type range :: [char] | Range.t() | Enum.t()
 
   @spec non_neg_integer(int_or_min_max) :: t()
   def non_neg_integer(digits_or_min_max) do
     {F.non_neg_integer(digits_or_min_max), P.non_neg_integer(digits_or_min_max)}
   end
 
-  @spec byte_string([char], int_or_min_max) :: t()
+  @spec byte_string(range, int_or_min_max) :: t()
   def byte_string(range, count_or_min_max) do
     {F.byte_string(range, count_or_min_max), P.byte_string(range, count_or_min_max)}
   end

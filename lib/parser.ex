@@ -5,7 +5,8 @@ defmodule Active.Parser do
     defstruct [:f, :args]
   end
 
-  @opaque t() :: %Parser{}
+  # can't be @opaque, can it?
+  @type t() :: %Parser{}
 
   defp prim(f, args), do: %Parser{f: f, args: args}
 
