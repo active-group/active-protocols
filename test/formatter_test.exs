@@ -27,8 +27,8 @@ defmodule FormatterTest do
     assert invoke(byte_string(?0..?9, 3), "abc") ==
              {:error, {:invalid_chars, MapSet.new(?0..?9), "abc"}}
 
-    assert invoke(byte_string(?0..?9, min: 1, max: 3), "123") == {:ok, "123"}
-    assert invoke(byte_string(?0..?9, min: 1, max: 3), "1") == {:ok, "1"}
+    assert invoke(byte_string(?0..?9, min: 0, max: 3), "123") == {:ok, "123"}
+    assert invoke(byte_string(?0..?9, min: 0, max: 3), "1") == {:ok, "1"}
 
     assert invoke(byte_string(?0..?9, 3), "1") ==
              {:error, {:wrong_string_size, "1", 3, 3}}

@@ -46,6 +46,11 @@ defmodule ParserTest do
     assert invoke_full(p, "12X") == {:ok, "12"}
     assert invoke_full(p, "123X") == {:ok, "123"}
     assert invoke_full(p, "1234X") == {:error, {:expected, "X", "4"}}
+
+    # with min: 0
+    p2 = append_const(byte_string(?0..?9, min: 0, max: 3), "X")
+    assert invoke_full(p2, "X") == {:ok, ""}
+    assert invoke_full(p2, "1X") == {:ok, "1"}
   end
 
   test "choice" do

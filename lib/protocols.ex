@@ -302,8 +302,16 @@ defmodule Active.Protocols do
 
         def close(socket), do: Active.Protocols.TCPClientRequestResponse.do_close(socket)
 
+        @doc """
+        Send a telegram and immediately wait to receive a telegram.
+        """
         def request(socket, telegram, timeout),
           do: Active.Protocols.TCPClientRequestResponse.do_request(socket, telegram, timeout)
+
+        @doc """
+        Send a telegram without waiting for a response.
+        """
+        def command(socket, telegram), do: Active.TelegramTCPSocket.send(socket, telegram)
       end
     end
 
@@ -348,8 +356,16 @@ defmodule Active.Protocols do
 
         def close(socket), do: Active.Protocols.UDPClientRequestResponse.do_close(socket)
 
+        @doc """
+        Send a telegram and immediately wait to receive a telegram.
+        """
         def request(socket, telegram, timeout),
           do: Active.Protocols.UDPClientRequestResponse.do_request(socket, telegram, timeout)
+
+        @doc """
+        Send a telegram without waiting for a response.
+        """
+        def command(socket, telegram), do: Active.TelegramUDPSocket.send(socket, telegram)
       end
     end
 
