@@ -71,9 +71,13 @@ defmodule FormatterTest do
              {:error, {:expected_tagged_tuple, :foo, {:bar, v1}}}
   end
 
+  defmodule TestS do
+    defstruct [:a, :b]
+  end
+
   test "unstruct" do
     {fmt1, v1, r1} = good_example_1()
     {fmt2, v2, r2} = good_example_2()
-    assert invoke(unstruct(a: fmt1, b: fmt2), %{a: v1, b: v2}) == {:ok, r1 <> r2}
+    assert invoke(unstruct(TestS, a: fmt1, b: fmt2), %TestS{a: v1, b: v2}) == {:ok, r1 <> r2}
   end
 end

@@ -66,7 +66,7 @@ defmodule Active.Coding do
     {fields, codings} = Enum.unzip(fields_codings)
     {fs, ps} = Enum.unzip(codings)
 
-    {F.unstruct(Enum.zip(fields, fs)), P.structure(struct, Enum.zip(fields, ps))}
+    {F.unstruct(struct, Enum.zip(fields, fs)), P.structure(struct, Enum.zip(fields, ps))}
   end
 
   @doc """

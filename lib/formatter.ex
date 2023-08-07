@@ -353,22 +353,26 @@ defmodule Active.Formatter do
     prim(&list_0/2, [formatters])
   end
 
-  defp unstruct_0(input, fields_formats) do
-    {fields, formats} = Enum.unzip(fields_formats)
+  defp unstruct_0(input, struct_module, fields_formats) do
+    if is_struct(input, struct_module) do
+      {fields, formats} = Enum.unzip(fields_formats)
 
-    case Enum.reduce(fields, true, fn f, acc -> acc && Map.has_key?(input, f) end) do
-      true ->
-        values = Enum.map(fields, fn f -> Map.fetch!(input, f) end)
-        invoke(list(formats), values)
+      case Enum.reduce(fields, true, fn f, acc -> acc && Map.has_key?(input, f) end) do
+        true ->
+          values = Enum.map(fields, fn f -> Map.fetch!(input, f) end)
+          invoke(list(formats), values)
 
-      false ->
-        {:error, {:struct_fields_missing, fields, input}}
+        false ->
+          {:error, {:struct_fields_missing, fields, input}}
+      end
+    else
+      {:error, {:not_struct, struct_module, input}}
     end
   end
 
-  @spec unstruct([{atom, t()}]) :: t
-  def unstruct(fields_formats) do
-    prim(&unstruct_0/2, [fields_formats])
+  @spec unstruct(atom, [{atom, t()}]) :: t
+  def unstruct(struct_module, fields_formats) do
+    prim(&unstruct_0/3, [struct_module, fields_formats])
   end
 
   # defp unwrap_0(input, on_element) do
