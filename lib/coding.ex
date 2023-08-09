@@ -6,7 +6,8 @@ defmodule Active.Coding do
   # Note: wanted to make it 'opaque', but dializer complains on user side then.
   @type t() :: {F.t(), P.t()}
 
-  @type int_or_min_max :: pos_integer | [{:min, pos_integer} | {:max, pos_integer | :infinity}]
+  @type int_or_min_max ::
+          non_neg_integer() | [{:min, non_neg_integer()} | {:max, non_neg_integer() | :infinity}]
   @type range :: [char] | Range.t() | Enum.t()
 
   @spec non_neg_integer(int_or_min_max) :: t()
