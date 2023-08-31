@@ -204,8 +204,7 @@ defmodule Active.Formatter do
   end
 
   defp to_enc(str, encoding) do
-    # TODO: replace-non-existent? from_string("Hello æøå!", :ascii, replace_nonexistent("_"))
-    case Codepagex.from_string(str, encoding) do
+    case Codepagex.from_string(str, encoding, Codepagex.use_utf_replacement()) do
       {:ok, bytes} -> {:ok, bytes}
       {:error, reason} -> {:error, {:not_encodable, encoding, str, reason}}
     end
