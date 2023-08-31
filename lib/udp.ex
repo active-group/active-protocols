@@ -10,14 +10,10 @@ defmodule Active.TelegramUDPSocket do
   defp udp_send(ip_socket, tmodule, telegram, target \\ nil) do
     case apply(tmodule, :encode, [telegram]) do
       {:ok, bytes} ->
-        # TODO: check for errors?
-        :ok =
-          case target do
-            nil -> :gen_udp.send(ip_socket, bytes)
-            {address, port} -> :gen_udp.send(ip_socket, address, port, bytes)
-          end
-
-        :ok
+        case target do
+          nil -> :gen_udp.send(ip_socket, bytes)
+          {address, port} -> :gen_udp.send(ip_socket, address, port, bytes)
+        end
 
       {:error, err} ->
         {:error, err}

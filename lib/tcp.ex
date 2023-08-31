@@ -15,7 +15,6 @@ defmodule Active.TelegramTCPSocket do
   defp tcp_send(ip_socket, tmodule, telegram) do
     case apply(tmodule, :encode, [telegram]) do
       {:ok, bytes} ->
-        # TODO: check for errors?
         case :gen_tcp.send(ip_socket, bytes) do
           # error: e.g. socket closed.
           {:error, reason} -> {:error, reason}
