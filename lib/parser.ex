@@ -359,7 +359,7 @@ defmodule Active.Parser do
   defp concat_rev(right, left), do: concat(left, right)
 
   def list(parsers) do
-    # TODO: something more efficient?
+    # OPT: something more efficient?
     Enum.reduce(Enum.map(parsers, &wrap/1), &concat_rev/2)
   end
 

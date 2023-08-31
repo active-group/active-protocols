@@ -1,7 +1,7 @@
 defmodule Active.Telegram do
   @type telegram :: term
 
-  # TODO: maybe make if {:eof, decoder_state} of 'continuation' to resume parsing after more bytes are received.
+  # OPT: maybe make if {:eof, decoder_state} of 'continuation' to resume parsing after more bytes are received.
 
   @callback decode(nonempty_binary) :: {:ok, telegram, binary} | :eof | {:error, term}
 
