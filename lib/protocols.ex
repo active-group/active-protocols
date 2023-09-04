@@ -127,12 +127,32 @@ defmodule Active.Protocols do
     end
 
     defp do_req_res_loop(session, module, socket, timeout) do
+      do_handle_error = fn session, reason ->
+        case apply(module, :handle_error, [session, reason]) do
+          :close ->
+            Active.TelegramTCPSocket.close(socket)
+            nil
+
+          {:continue, session} ->
+            do_req_res_loop(session, module, socket, timeout)
+
+          {:fail, reason} ->
+            Active.TelegramTCPSocket.close(socket)
+            Process.exit(self(), reason)
+        end
+      end
+
       case Active.TelegramTCPSocket.recv(socket, timeout) do
         {:ok, request} ->
           case apply(module, :handle_request, [session, request]) do
             {:reply, response, session} ->
-              Active.TelegramTCPSocket.send(socket, response)
-              do_req_res_loop(session, module, socket, timeout)
+              case Active.TelegramTCPSocket.send(socket, response) do
+                :ok ->
+                  do_req_res_loop(session, module, socket, timeout)
+
+                {:error, reason} ->
+                  do_handle_error.(session, reason)
+              end
 
             {:noreply, session} ->
               do_req_res_loop(session, module, socket, timeout)
@@ -142,20 +162,8 @@ defmodule Active.Protocols do
           Active.TelegramTCPSocket.close(socket)
           nil
 
-        # TODO: some handle_error callback for logging?
         {:error, reason} ->
-          case apply(module, :handle_error, [session, reason]) do
-            :close ->
-              Active.TelegramTCPSocket.close(socket)
-              nil
-
-            {:continue, session} ->
-              do_req_res_loop(session, module, socket, timeout)
-
-            {:fail, reason} ->
-              Active.TelegramTCPSocket.close(socket)
-              Process.exit(self(), reason)
-          end
+          do_handle_error.(session, reason)
       end
     end
   end
@@ -238,7 +246,7 @@ defmodule Active.Protocols do
     @callback handle_request(session, telegram) ::
                 {:reply, telegram, session} | {:noreply, session}
 
-    @callback handle_error(session, term) :: :close | {:continue, session} | {:fail, term}
+    @callback handle_error(session, term) :: {:continue, session} | {:fail, term}
 
     defmacro __using__(opts) do
       quote do
@@ -249,18 +257,34 @@ defmodule Active.Protocols do
         defp serve(socket, session) do
           alias Active.TelegramUDPSocket
 
-          # TODO: errors, with option to :continue, :close, etc.
+          do_handle_error = fn session, reason ->
+            case handle_error(session, reason) do
+              {:continue, session} ->
+                serve(socket, session)
+
+              {:fail, reason} ->
+                Process.exit(self(), reason)
+            end
+          end
+
           case TelegramUDPSocket.recv(socket, :infinity) do
             {:ok, {source_addr, source_port, request}} ->
               case handle_request(session, request) do
                 {:reply, response, session} ->
                   case TelegramUDPSocket.send(socket, source_addr, source_port, response) do
-                    :ok -> serve(socket, session)
+                    :ok ->
+                      serve(socket, session)
+
+                    {:error, reason} ->
+                      do_handle_error.(session, reason)
                   end
 
                 {:noreply, session} ->
                   serve(socket, session)
               end
+
+            {:error, reason} ->
+              do_handle_error.(session, reason)
           end
         end
 
