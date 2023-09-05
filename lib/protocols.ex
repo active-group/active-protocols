@@ -252,51 +252,51 @@ defmodule Active.Protocols do
 
     @callback handle_error(session, term) :: :close | {:continue, session} | {:fail, term}
 
+    def do_serve(module, socket, session) do
+      alias Active.TelegramUDPSocket
+
+      do_loop = fn session ->
+        do_serve(module, socket, session)
+      end
+
+      do_handle_error = fn session, reason ->
+        case apply(module, :handle_error, [session, reason]) do
+          :close ->
+            Active.TelegramUDPSocket.close(socket)
+            nil
+
+          {:continue, session} ->
+            do_loop.(session)
+
+          {:fail, reason} ->
+            Active.TelegramUDPSocket.close(socket)
+            Process.exit(self(), reason)
+        end
+      end
+
+      case TelegramUDPSocket.recv(socket, :infinity) do
+        {:ok, {source_addr, source_port, request}} ->
+          case apply(module, :handle_request, [session, request]) do
+            {:reply, response, session} ->
+              case TelegramUDPSocket.send(socket, source_addr, source_port, response) do
+                :ok -> do_loop.(session)
+                {:error, reason} -> do_handle_error.(session, reason)
+              end
+
+            {:noreply, session} ->
+              do_loop.(session)
+          end
+
+        {:error, reason} ->
+          do_handle_error.(session, reason)
+      end
+    end
+
     defmacro __using__(opts) do
       quote do
         def telegrams, do: unquote(opts[:telegrams])
 
         @behaviour Active.Protocols.UDPServerRequestResponse
-
-        defp serve(socket, session) do
-          alias Active.TelegramUDPSocket
-
-          do_loop = fn session ->
-            serve(socket, session)
-          end
-
-          do_handle_error = fn session, reason ->
-            case handle_error(session, reason) do
-              :close ->
-                Active.TelegramUDPSocket.close(socket)
-                nil
-
-              {:continue, session} ->
-                do_loop.(session)
-
-              {:fail, reason} ->
-                Active.TelegramUDPSocket.close(socket)
-                Process.exit(self(), reason)
-            end
-          end
-
-          case TelegramUDPSocket.recv(socket, :infinity) do
-            {:ok, {source_addr, source_port, request}} ->
-              case handle_request(session, request) do
-                {:reply, response, session} ->
-                  case TelegramUDPSocket.send(socket, source_addr, source_port, response) do
-                    :ok -> do_loop.(session)
-                    {:error, reason} -> do_handle_error.(session, reason)
-                  end
-
-                {:noreply, session} ->
-                  do_loop.(session)
-              end
-
-            {:error, reason} ->
-              do_handle_error.(session, reason)
-          end
-        end
 
         def start_listener(address, port, user_arg) do
           Active.Protocols.UDPServer.start_listener(
@@ -304,7 +304,7 @@ defmodule Active.Protocols do
             port,
             telegrams(),
             {&init_session/2, [user_arg]},
-            &serve/2
+            &Active.Protocols.UDPServerRequestResponse.do_serve(__MODULE__, &1, &2)
           )
         end
 
