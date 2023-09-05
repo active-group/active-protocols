@@ -206,7 +206,7 @@ defmodule Active.Formatter do
   defp to_enc(str, encoding) do
     case Codepagex.from_string(str, encoding, Codepagex.use_utf_replacement()) do
       {:ok, bytes, _num_replaced} -> {:ok, bytes}
-      {:error, reason} -> {:error, {:not_encodable, encoding, str, reason}}
+      {:error, reason, _} -> {:error, {:not_encodable, encoding, str, reason}}
     end
   end
 
