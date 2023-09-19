@@ -1,10 +1,11 @@
 defmodule Active.TelegramUDPSocket do
-  defstruct [:ip_socket, :tmodule]
+  defstruct [:ip_socket, :tmodule, :remote]
 
   @type t() :: %__MODULE__{}
 
-  def socket(ip_socket, telegram_module) do
-    %__MODULE__{ip_socket: ip_socket, tmodule: telegram_module}
+  def socket(ip_socket, telegram_module, remote \\ nil) do
+    # Note: I guess 'remote' is stored in ip_socket somewhere? Can't see how to get it now.
+    %__MODULE__{ip_socket: ip_socket, tmodule: telegram_module, remote: remote}
   end
 
   defp udp_send(ip_socket, tmodule, telegram, target \\ nil) do
@@ -71,7 +72,17 @@ defmodule Active.TelegramUDPSocket do
     :inet.close(socket.ip_socket)
   end
 
+  @doc """
+  Local port, if socket is open.
+  """
   def get_port(socket) do
     :inet.port(socket.ip_socket)
+  end
+
+  @doc """
+  Remote {address, port} if socket if 'connected'.
+  """
+  def get_remote(socket) do
+    socket.remote
   end
 end

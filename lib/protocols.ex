@@ -373,8 +373,24 @@ defmodule Active.Protocols do
   end
 
   defmodule UDPClientRequestResponse do
+    @type telegram() :: any()
+
+    @doc """
+    Optional callback, called after every successfull receive of a telegram.
+    """
+    @callback monitor_inbound(:inet.socket_address(), :inet.port_number(), telegram()) :: :ok
+
+    @doc """
+    Optional callback, called after every successfull send of a telegram.
+    """
+    @callback monitor_outbound(:inet.socket_address(), :inet.port_number(), telegram()) :: :ok
+
+    @optional_callbacks monitor_inbound: 3, monitor_outbound: 3
+
     defmacro __using__(opts) do
       quote do
+        @behaviour UDPClientRequestResponse
+
         def telegrams, do: unquote(opts[:telegrams])
 
         def connect(host, port) do
@@ -384,7 +400,7 @@ defmodule Active.Protocols do
 
             {:ok, ip_socket} ->
               :ok = :gen_udp.connect(ip_socket, host, port)
-              {:ok, Active.TelegramUDPSocket.socket(ip_socket, telegrams())}
+              {:ok, Active.TelegramUDPSocket.socket(ip_socket, telegrams(), {host, port})}
           end
         end
 
@@ -394,12 +410,50 @@ defmodule Active.Protocols do
         Send a telegram and immediately wait to receive a telegram.
         """
         def request(socket, telegram, timeout),
-          do: Active.Protocols.UDPClientRequestResponse.do_request(socket, telegram, timeout)
+          do:
+            Active.Protocols.UDPClientRequestResponse.do_request(
+              __MODULE__,
+              socket,
+              telegram,
+              timeout
+            )
 
         @doc """
         Send a telegram without waiting for a response.
         """
-        def command(socket, telegram), do: Active.TelegramUDPSocket.send(socket, telegram)
+        def command(socket, telegram),
+          do: Active.Protocols.UDPClientRequestResponse.do_send(__MODULE__, socket, telegram)
+      end
+    end
+
+    @doc false
+    def do_send(module, socket, telegram) do
+      case Active.TelegramUDPSocket.send(socket, telegram) do
+        :ok ->
+          if function_exported?(module, :monitor_outbound, 3) do
+            {host, port} = Active.TelegramUDPSocket.get_remote(socket)
+            :ok = apply(module, :monitor_outbound, [host, port, telegram])
+          end
+
+          :ok
+
+        {:error, err} ->
+          {:error, err}
+      end
+    end
+
+    @doc false
+    def do_recv(module, socket, timeout) do
+      case Active.TelegramUDPSocket.recv(socket, timeout) do
+        {:ok, {from_host, from_port, response}} ->
+          if function_exported?(module, :monitor_inbound, 3) do
+            :ok = apply(module, :monitor_inbound, [from_host, from_port, response])
+          end
+
+          {:ok, {from_host, from_port, response}}
+
+        {:error, err} ->
+          {:error, err}
       end
     end
 
@@ -409,8 +463,8 @@ defmodule Active.Protocols do
     end
 
     @doc false
-    def do_request(socket, telegram, timeout) do
-      case Active.TelegramUDPSocket.send(socket, telegram) do
+    def do_request(module, socket, telegram, timeout) do
+      case do_send(module, socket, telegram) do
         {:error, :closed} ->
           {:error, {:send_failed, :closed}}
 
@@ -418,7 +472,7 @@ defmodule Active.Protocols do
           {:error, {:send_failed, reason}}
 
         :ok ->
-          case Active.TelegramUDPSocket.recv(socket, timeout) do
+          case do_recv(module, socket, timeout) do
             {:error, reason} -> {:error, {:recv_failed, reason}}
             {:ok, {_from_host, _from_port, response}} -> {:ok, response}
           end
