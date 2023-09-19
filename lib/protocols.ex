@@ -11,7 +11,7 @@ defmodule Active.Protocols do
 
     defmacro __using__(opts) do
       quote do
-        @behaviour TCPServerProtocol
+        @behaviour Active.Protocols.TCPServerProtocol
 
         alias unquote(opts[:telegrams]), as: Telegrams
 
@@ -102,7 +102,7 @@ defmodule Active.Protocols do
 
     defmacro __using__(opts) do
       quote do
-        @behaviour TCPServerRequestResponse
+        @behaviour Active.Protocols.TCPServerRequestResponse
 
         use TCPServerProtocol, telegrams: unquote(opts[:telegrams])
 
@@ -389,7 +389,7 @@ defmodule Active.Protocols do
 
     defmacro __using__(opts) do
       quote do
-        @behaviour UDPClientRequestResponse
+        @behaviour Active.Protocols.UDPClientRequestResponse
 
         def telegrams, do: unquote(opts[:telegrams])
 
