@@ -67,14 +67,10 @@ defmodule Active.TelegramTCPSocket do
 
   @spec recv(t(), timeout()) :: {:ok, term} | {:error, :timeout} | {:error, term}
   def recv(socket, timeout) do
-    # Note: update has a default timeout of 5 seconds. Failing the process if reached. Set to :infinity?
-    # Note: this fails when the timeout is reached
-
-    # FIXME: catch timeouts.
     Agent.get_and_update(
       socket.agent,
       &tcp_recv(socket.ip_socket, socket.tmodule, &1, timeout),
-      timeout
+      :infinity
     )
   end
 
