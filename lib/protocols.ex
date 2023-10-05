@@ -65,8 +65,9 @@ defmodule Active.Protocols do
           # Note: handshake has to be done in the protocol process; otherwise it will hang.
           # Note: I think handshake will suceed with simple tcp as the transport.
           {:ok, ip_socket} = :ranch.handshake(ref)
-          # TODO: Use _transport.recv and .send and .close
-          Active.TelegramTCPSocket.socket(ip_socket, telegrams)
+          # TODO: Use _transport.recv and .send and .close?
+          {:ok, remote} = :ranch_tcp.peername(ip_socket)
+          Active.TelegramTCPSocket.socket(ip_socket, telegrams, remote)
         end
 
         apply(mod, :start_link, [telegram_socket, opts])
@@ -327,7 +328,7 @@ defmodule Active.Protocols do
         def connect(host, port, connect_timeout) do
           case :gen_tcp.connect(host, port, [active: false, mode: :binary], connect_timeout) do
             {:ok, ip_socket} ->
-              {:ok, Active.TelegramTCPSocket.socket(ip_socket, telegrams())}
+              {:ok, Active.TelegramTCPSocket.socket(ip_socket, telegrams(), {host, port})}
 
             {:error, reason} ->
               {:error, reason}
@@ -393,6 +394,9 @@ defmodule Active.Protocols do
 
         def telegrams, do: unquote(opts[:telegrams])
 
+        # TODO: telegrams.t()?
+        @type telegram() :: any()
+
         def connect(host, port) do
           case :gen_udp.open(0, active: false, mode: :binary) do
             {:error, reason} ->
@@ -409,6 +413,10 @@ defmodule Active.Protocols do
         @doc """
         Send a telegram and immediately wait to receive a telegram.
         """
+        @spec request(Active.TelegramUDPSocket.t(), telegram(), any) ::
+                {:ok, telegram()}
+                | {:error, {:send_failed, term()}}
+                | {:error, {:recv_failed, term()}}
         def request(socket, telegram, timeout),
           do:
             Active.Protocols.UDPClientRequestResponse.do_request(
@@ -421,6 +429,7 @@ defmodule Active.Protocols do
         @doc """
         Send a telegram without waiting for a response.
         """
+        @spec command(Active.TelegramUDPSocket.t(), telegram()) :: :ok | {:error, term()}
         def command(socket, telegram),
           do: Active.Protocols.UDPClientRequestResponse.do_send(__MODULE__, socket, telegram)
       end

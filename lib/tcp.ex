@@ -1,5 +1,5 @@
 defmodule Active.TelegramTCPSocket do
-  defstruct [:agent, :ip_socket, :tmodule]
+  defstruct [:agent, :ip_socket, :tmodule, :remote]
 
   @type t() :: %__MODULE__{}
 
@@ -7,9 +7,9 @@ defmodule Active.TelegramTCPSocket do
     defstruct [:buffer]
   end
 
-  def socket(ip_socket, telegram_module) do
+  def socket(ip_socket, telegram_module, remote) do
     {:ok, pid} = Agent.start_link(fn -> %State{buffer: <<>>} end)
-    %__MODULE__{agent: pid, ip_socket: ip_socket, tmodule: telegram_module}
+    %__MODULE__{agent: pid, ip_socket: ip_socket, tmodule: telegram_module, remote: remote}
   end
 
   defp tcp_send(ip_socket, tmodule, telegram) do
@@ -76,5 +76,12 @@ defmodule Active.TelegramTCPSocket do
 
   def close(socket) do
     :inet.close(socket.ip_socket)
+  end
+
+  @doc """
+  Remote {address, port}.
+  """
+  def get_remote(socket) do
+    socket.remote
   end
 end

@@ -80,7 +80,7 @@ defmodule Active.TelegramUDPSocket do
   end
 
   @doc """
-  Remote {address, port} if socket if 'connected'.
+  Remote {address, port} if socket is 'connected'.
   """
   def get_remote(socket) do
     socket.remote
