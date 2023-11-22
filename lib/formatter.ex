@@ -137,14 +137,25 @@ defmodule Active.Formatter do
     end
   end
 
+  defp choice_error(result, _choices) do
+    case result do
+      {:error, _e} ->
+        # Note: adding all choices to the error will usually generate a huge unhelpful error printout.
+        # We could customize that: https://hexdocs.pm/elixir/main/Inspect.html
+        # Or try to find the 'closest' match?
+        {:error, :none_of_choices}
+
+      ok ->
+        ok
+    end
+  end
+
   def choice(choices) do
     # TODO when length(choices) >= 2
     case choices do
       [c1 | cr] -> prim(&choice_0/3, [c1, cr])
     end
-
-    # TODO: change error into 'expected one of...'
-    # |> fmap({&choice_error/2, [choices]})
+    |> fmap({&choice_error/2, [choices]})
   end
 
   defp non_neg_integer_0(v, min, max) do
