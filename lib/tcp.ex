@@ -75,6 +75,7 @@ defmodule Active.TelegramTCPSocket do
   end
 
   def close(socket) do
+    Agent.stop(socket.agent, :normal)
     :inet.close(socket.ip_socket)
   end
 
